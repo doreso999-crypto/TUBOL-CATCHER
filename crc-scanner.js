@@ -1396,7 +1396,7 @@ margin-top:4px;
 line-height:1.5;
 ">
 
-Negative Accounts BABY: <b>${data.length}</b><br>
+Negative Accountsawdawd: <b>${data.length}</b><br>
 
 Negative Items: <b>${negativeItemCount}</b><br>
 
