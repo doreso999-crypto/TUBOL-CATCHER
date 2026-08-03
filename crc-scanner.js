@@ -1,3 +1,4 @@
+//@VERSION 1.0
 const COLLECTION_AGENCIES = [
 
     "portfolio recovery",
@@ -1395,7 +1396,7 @@ margin-top:4px;
 line-height:1.5;
 ">
 
-Negative Accounts: <b>${data.length}</b><br>
+Negative Accounts BABY: <b>${data.length}</b><br>
 
 Negative Items: <b>${negativeItemCount}</b><br>
 
