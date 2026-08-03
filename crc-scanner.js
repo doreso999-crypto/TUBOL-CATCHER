@@ -1,13 +1,4 @@
-// ==UserScript==
-// @name         CRC NEGATIVE EXTRACOR
-// @namespace    http://tampermonkey.net/
-// @version      1.0
-// @description  Extract negative accounts from CRC credit report preview
-// @match        https://app.creditrepaircloud.com/app/clients/*
-// @grant        none
-// ==/UserScript==
 
-//COLLECTION AGNECIES JSON
 const COLLECTION_AGENCIES = [
 
     "portfolio recovery",
