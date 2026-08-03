@@ -1,4 +1,15 @@
-//@VERSION 1.0
+// ==UserScript==
+// @name         testing ground
+// @namespace    http://tampermonkey.net/
+// @version      1.0
+// @description  Extract negative accounts from CRC credit report preview
+// @match        https://app.creditrepaircloud.com/app/clients/*
+// @grant        none
+// ==/UserScript==
+
+
+
+//COLLECTION AGNECIES JSON
 const COLLECTION_AGENCIES = [
 
     "portfolio recovery",
@@ -575,9 +586,6 @@ const priority = [
     // COLLECTION INDICATORS
     ["other collection agencies", "COLLECTION"],
     ["original creditor", "COLLECTION"],
-    ["sold to", "COLLECTION"],
-    ["assigned to", "COLLECTION"],
-    ["purchased by", "COLLECTION"],
     ["placed for collection", "COLLECTION"],
 
     // OTHER NEGATIVE TYPES
@@ -693,7 +701,7 @@ if(
     !isKnownCollectionAgency(accountName)
 ){
 
-    collectionWarning = "⚠ UNKNOWN COLLECTION AGENCY";
+    collectionWarning = "⚠ VERIFY COLLECTION ACCT";
 
 }
 
