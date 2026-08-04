@@ -7,8 +7,6 @@
 // @grant        none
 // ==/UserScript==
 
-
-
 //COLLECTION AGNECIES JSON
 const COLLECTION_AGENCIES = [
 
@@ -255,11 +253,12 @@ bureauNames.forEach(bureau=>{
         );
 
 
-        if(cell && cell.innerText.trim()){
-
-            hasData = true;
-
-        }
+if (
+    cell &&
+    !["", "-", "--"].includes(cell.innerText.trim())
+) {
+    hasData = true;
+}
 
     });
 
@@ -355,9 +354,13 @@ function getPriorityRowValue(label){
         getRowValue(label, bureau);
 
 
-        if(value){
-            return value;
-        }
+if(
+    value &&
+    value !== "-" &&
+    value !== "--"
+){
+    return value;
+}
 
     }
 
@@ -423,9 +426,13 @@ function getPriorityValue(label){
                     cell.innerText.trim();
 
 
-                    if(value){
-                        return value;
-                    }
+                    if(
+    value &&
+    value !== "-" &&
+    value !== "--"
+){
+    return value;
+}
 
                 }
 
@@ -521,11 +528,13 @@ const priority = [
                 cell.innerText.trim();
 
 
-                if(value){
-
-                    return value;
-
-                }
+if(
+    value &&
+    value !== "-" &&
+    value !== "--"
+){
+    return value;
+}
 
             }
 
