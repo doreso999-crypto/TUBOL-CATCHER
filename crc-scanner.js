@@ -7,6 +7,8 @@
 // @grant        none
 // ==/UserScript==
 
+
+
 //COLLECTION AGNECIES JSON
 const COLLECTION_AGENCIES = [
 
@@ -604,7 +606,8 @@ const priority = [
     ["INVOLUNTARY REPOSSESSION", "Repossessed"],
 
     // CHARGE OFF
-    ["DEBT INCLUDED IN OR DISCHARGED THROUGH BANKRUPTCY", "CHARGE OFF"],
+    ["DEBT INCLUDED IN OR DISCHARGED THROUGH BANKRUPTCY", "INCLUDED IN BANKRUPTCY"],
+    ["INCLUDED IN BANKRUPTCY", "INCLUDED IN BANKRUPTCY"],
     ["collection/charge off", "CHARGE OFF"],
     ["charge off", "CHARGE OFF"],
     ["charged off", "CHARGE OFF"],
@@ -612,7 +615,7 @@ const priority = [
     ["write off", "CHARGE OFF"],
     ["LOSS BY CREDIT GRANTOR", "CHARGE OFF"],
     ["COLLECTION", "CHARGE OFF"],
-    ["CHAPTER", "CHARGE OFF"],
+    ["CHAPTER", "INCLUDED IN BANKRUPTCY"],
 
    // ["bankruptcy", "Bankruptcy"],
 
@@ -633,8 +636,9 @@ for (const [keyword, result] of priority) {
     }
 }
 
-if (found.includes("COLLECTION")) return "Collection";
-if (found.includes("CHARGE OFF")) return "Charge Off";
+if (found.includes("INCLUDED IN BANKRUPTCY")) return "INCLUDED IN BANKRUPTCY";
+if (found.includes("COLLECTION")) return "COLLECTION";
+if (found.includes("CHARGE OFF")) return "CHARGE OFF";
 if (found.includes("Repossessed")) return "Repossessed";
 if (found.includes("Foreclosure")) return "Foreclosure";
 if (found.includes("Bankruptcy")) return "Bankruptcy";
