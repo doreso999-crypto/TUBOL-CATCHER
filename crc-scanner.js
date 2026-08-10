@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         WORKSHOP! [WITH PAGE 2 OPEN ACCOUNTS]
+// @name         WORKSHOP!
 // @namespace    http://tampermonkey.net/
 // @version      3.1
 // @description  Extract negative accounts + open accounts from CRC
@@ -873,6 +873,47 @@ Controls padding, font, spacing, and appearance for all 3
     font-size: 15px;
     font-weight: 700;
 }
+#crc-open-view-controls {
+    display: flex;
+    gap: 6px;
+    padding: 8px 14px 4px;
+}
+
+#crc-open-view-controls button {
+    flex: 1;
+    height: 34px;
+    background: #242526;
+    color: #b0b3b8;
+    border: 1px solid #3a3b3c;
+    border-radius: 7px;
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+#crc-open-view-controls button.active {
+    background: #2374e1;
+    color: white;
+    border-color: #2374e1;
+}
+
+#crc-open-simple-list {
+    display: none;
+    padding: 8px 14px 18px;
+}
+
+.crc-simple-account {
+    padding: 8px 4px;
+    color: #e4e6eb;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.crc-simple-number {
+    display: inline-block;
+    width: 28px;
+    color: #8a8d91;
+}
 
 /* =========================================================
    MOBILE
@@ -951,8 +992,17 @@ Controls padding, font, spacing, and appearance for all 3
                 <div id="crc-results"></div>
             </div>
 
-            <div id="crc-page-2" class="crc-page">
-                <div id="crc-open-accounts"></div>
+         <div id="crc-page-2" class="crc-page">
+
+    <div id="crc-open-view-controls">
+        <button id="crc-open-card-view" class="active">CARD VIEW</button>
+        <button id="crc-open-simple-view">SIMPLE VIEW</button>
+    </div>
+
+    <div id="crc-open-accounts"></div>
+    <div id="crc-open-simple-list"></div>
+
+</div>
             </div>
 
             <div id="crc-page-3" class="crc-page">
@@ -1045,8 +1095,8 @@ Controls padding, font, spacing, and appearance for all 3
             }
 
             const bureauInfo = [
-                { name: "experian", code: "EX" },
                 { name: "equifax", code: "EQU" },
+                { name: "experian", code: "EX" },
                 { name: "transunion", code: "TU" }
             ];
 
@@ -1347,7 +1397,20 @@ Controls padding, font, spacing, and appearance for all 3
             }
 
             let collectionWarning = "";
-            if (accountType === "Collection" && !isKnownCollectionAgency(accountName)) {
+
+            const fullAccountText = grid.innerText.toLowerCase();
+
+            const looksLikeCollection =
+                  fullAccountText.includes("collection") ||
+                  fullAccountText.includes("placed for collection") ||
+                  fullAccountText.includes("other collection agencies") ||
+                  fullAccountText.includes("original creditor") ||
+                  fullAccountText.includes("collection/charge off");
+
+            if (
+    looksLikeCollection &&
+    !isKnownCollectionAgency(accountName)
+            ) {
                 collectionWarning = "⚠ VERIFY COLLECTION ACCT";
             }
 
@@ -1519,6 +1582,50 @@ Controls padding, font, spacing, and appearance for all 3
                     </div>
                 `;
             });
+            const simpleList =
+            panel.querySelector("#crc-open-simple-list");
+
+        simpleList.innerHTML = "";
+
+        openAccounts.forEach((item, index) => {
+
+            simpleList.innerHTML += `
+                <div class="crc-simple-account">
+                    <span class="crc-simple-number">${index + 1}.</span>
+                    ${item.account}
+                </div>
+            `;
+
+        });
+        const cardViewBtn =
+    panel.querySelector("#crc-open-card-view");
+
+const simpleViewBtn =
+    panel.querySelector("#crc-open-simple-view");
+
+const cardView =
+    panel.querySelector("#crc-open-accounts");
+
+const simpleView =
+    panel.querySelector("#crc-open-simple-list");
+
+cardViewBtn.onclick = function() {
+
+    cardView.style.display = "block";
+    simpleView.style.display = "none";
+
+    cardViewBtn.classList.add("active");
+    simpleViewBtn.classList.remove("active");
+};
+
+simpleViewBtn.onclick = function() {
+
+    cardView.style.display = "none";
+    simpleView.style.display = "block";
+
+    simpleViewBtn.classList.add("active");
+    cardViewBtn.classList.remove("active");
+};
         }
 
         // ========================================
