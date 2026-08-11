@@ -1404,8 +1404,7 @@ Controls padding, font, spacing, and appearance for all 3
                   fullAccountText.includes("collection") ||
                   fullAccountText.includes("placed for collection") ||
                   fullAccountText.includes("other collection agencies") ||
-                  fullAccountText.includes("original creditor") ||
-                  fullAccountText.includes("collection/charge off");
+                  fullAccountText.includes("original creditor");
 
             if (
     looksLikeCollection &&
