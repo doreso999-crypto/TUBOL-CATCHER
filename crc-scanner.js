@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         crc test script
+// @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
 // @version      3.3
 // @description  Extract negative accounts + open accounts + dispute strategy from CRC
@@ -31,7 +31,7 @@
         "commonwealth financial", "ability recovery", "continental finance",
         "receivable solutions", "aldous", "jeffcaps", "jefferson capital systems", "portfolio","JEFFERSON CAPITAL SYST",
         "spring oaks capital", "spring oaks capital llc", "spring oaks capital spv", "spring oaks capital spv llc", "spring oaks", "spring oaks capital spv",
-        "MIDLANDCRE"
+        "MIDLANDCRE", "CONTRACT CALLERS INC", "CCI"
 
     ];
 
