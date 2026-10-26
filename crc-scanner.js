@@ -1135,6 +1135,7 @@ const CSS_STYLES = `
 
 #crc-negative-panel.crc-minimized #crc-header-divider,
 #crc-negative-panel.crc-minimized #crc-header-stats,
+#crc-negative-panel.crc-minimized .crc-stat-row-wrapper,
 #crc-negative-panel.crc-minimized #crc-page-tabs,
 #crc-negative-panel.crc-minimized #crc-page-content,
 #crc-negative-panel.crc-minimized #crc-copy-wrapper {
@@ -1523,6 +1524,12 @@ Controls padding, font, spacing, and appearance for all 3
         <div id="crc-top-bar">
             <button id="crc-settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="crc-settings-menu">⚙</button>
             <div id="crc-drag-handle" aria-hidden="true" title="Drag to move the extractor">DRAG TO MOVE</div>
+            <div id="crc-window-controls">
+                <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
+                <button id="crc-close-btn" class="crc-window-btn" title="Close">✕</button>
+            </div>
+        </div>
+
             <div id="crc-settings-backdrop" hidden></div>
             <div id="crc-settings-menu" role="dialog" aria-modal="true" aria-label="Scanner settings" hidden>
                 <div class="crc-settings-heading-row">
@@ -1574,12 +1581,6 @@ Controls padding, font, spacing, and appearance for all 3
                 </div>
                 </div>
             </div>
-            <div id="crc-window-controls">
-                <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
-                <button id="crc-close-btn" class="crc-window-btn" title="Close">✕</button>
-            </div>
-        </div>
-
         <div class="crc-alias-overlay" id="crc-alias-overlay" role="dialog" aria-modal="true" aria-label="Assign inquiry creditor" hidden>
             <div class="crc-alias-card">
                 <h3 id="crc-alias-dialog-title">Assign Creditor Name</h3>
