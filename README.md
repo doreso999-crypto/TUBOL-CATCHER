@@ -2,7 +2,7 @@
 
 Takes negative accounts and inquiries from Credit Repair Cloud in one click.
 
-## Creditor alias matching (userscript v4.0)
+## Creditor alias matching (userscript v4.1)
 
 In **INQUIRIES**, a row is green when its creditor matches an **OPEN** account on the **same credit bureau**, using either the same normalized name or a known alias from [creditor-aliases.json](creditor-aliases.json).
 
@@ -19,10 +19,26 @@ The JSON contains a researched, **non-exhaustive** seed registry. Other names, r
 
 ### Managing creditor aliases in the scanner
 
+Open the gear icon's **Settings** window. It now opens as a separate, bounded
+panel (up to 740px wide and 74% viewport height), with **General** and
+**Creditor Aliases** tabs rather than a cramped menu.
+
+Under **Settings → Creditor Aliases**, use **+ Add Creditor** to create your own
+proper creditor name if it is absent from the built-in dictionary. Custom
+creditors are saved locally and remain after reloading the page.
+Right-click a custom creditor's heading to delete it and its variations;
+built-in creditor groups cannot be deleted.
+
 Open **Settings → Creditor Name Variations** to browse the list of creditor groups.
 Expand any creditor to see its aliases. Right-click a variation to remove it
 (with confirmation). The main creditor name cannot be deleted. Use the search
 field to find a creditor or variation quickly.
+
+On **OPEN ACCOUNTS**, you can also right-click any account card to
+assign its *reported account name* as a variation of a proper creditor name.
+The dropdown contains **+ Create a new creditor** if you cannot find one.
+Creating a creditor from an inquiry or open account also associates the
+selected reported name with the new proper name, in one saved change.
 
 On **INQUIRIES** or **NEW**, right-click any inquiry row, select the correct
 creditor (for example, select **American Express** for a missing variant of AMEX),
@@ -34,7 +50,8 @@ the **same bureau**.
 
 Alias edits are stored in this browser's `localStorage`, **not** in GitHub's
 `creditor-aliases.json`. The bundled registry remains the default. Use
-**Restore default aliases** in Settings to discard local edits. No consumer
+**Restore default aliases** in Settings to discard locally added variations
+and manually created creditor groups. No consumer
 report data or account numbers are stored by this feature (only creditor
 labels intentionally added or removed). Editing one browser does not
 automatically update other devices or the shared JSON.
