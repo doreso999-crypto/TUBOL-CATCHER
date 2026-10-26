@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.1
+// @version      4.2
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -1534,14 +1534,15 @@ Controls padding, font, spacing, and appearance for all 3
     // ========================================
 
     function isKnownCollectionAgency(name) {
-        let creditor = name.toLowerCase().trim();
-        return COLLECTION_AGENCIES.some(agency => {
-            agency = agency.toLowerCase().trim();
-            return (
-                creditor === agency ||
-                creditor.includes(agency) ||
-                agency.includes(creditor)
-            );
+        const creditor = normalizeAccountName(name);
+        if (!creditor) return false;
+        // Only whole-name or whole-word boundary matches; a short fragment
+        // of a real collection agency's name is not enough.
+        return COLLECTION_AGENCIES.some(nameInRegistry => {
+            const agency = normalizeAccountName(nameInRegistry);
+            return !!agency && (creditor === agency ||
+                creditor.startsWith(agency + ' ') ||
+                creditor.endsWith(' ' + agency));
         });
     }
 
@@ -2091,6 +2092,38 @@ Controls padding, font, spacing, and appearance for all 3
         return { list: output, byBureau: byBureau };
     }
 
+    // One source of truth for Negative-tab account type. The word "closed"
+    // describes an account's status and must never override collection evidence.
+    function hasCollectionEvidence(accountTableText) {
+        const text = String(accountTableText || '').toLowerCase();
+        return /\bcollections?\b/.test(text) ||
+            /\bplaced\s+for\s+collection\b/.test(text);
+    }
+
+    function classifyNegativeAccountType(creditorName, accountTableText) {
+        const text = String(accountTableText || '').toLowerCase().replace(/\s+/g, ' ');
+
+        if (/\b(?:included\s+in\s+bankruptcy|discharged\s+through\s+bankruptcy|chapter\s+\d+)\b/.test(text)) {
+            return 'INCLUDED IN BANKRUPTCY';
+        }
+
+        // The creditor registry, not the reported OPEN/CLOSED account status,
+        // decides whether collection-related data means COLLECTION or CHARGE OFF.
+        if (isKnownCollectionAgency(creditorName)) return 'COLLECTION';
+        if (hasCollectionEvidence(text)) return 'CHARGE OFF';
+
+        if (/\b(?:charge(?:d)?[ -]?offs?|profit\s+and\s+loss|write[ -]?offs?|loss\s+by\s+credit\s+grantor)\b/.test(text)) {
+            return 'CHARGE OFF';
+        }
+        if (/\b(?:repossess(?:ed|ion)?|involuntary\s+repossession)\b/.test(text)) return 'Repossessed';
+        if (/\bforeclosure\b/.test(text)) return 'Foreclosure';
+        if (/\btransferred\b/.test(text)) return 'Transferred';
+        if (/\bclosed\b/.test(text)) return 'CLOSED LP';
+        if (/\bopen\b/.test(text)) return 'OPEN LP';
+        if (/\bpaid\b/.test(text)) return 'PAID LP';
+        return '';
+    }
+
     function extractData() {
         let output = [];
         let grids = document.querySelectorAll('.MuiDataGrid-root');
@@ -2232,68 +2265,16 @@ Controls padding, font, spacing, and appearance for all 3
             }
 
             function getAccountType() {
-                const creditor = accountName.toLowerCase().trim();
-
-                for (const name of COLLECTION_AGENCIES) {
-                    const agency = name.toLowerCase().trim();
-                    if (creditor === agency || creditor.startsWith(agency + " ") || creditor.endsWith(" " + agency)) {
-                        return "COLLECTION";
-                    }
-                }
-
-                let text = "";
+                // Include the complete account grid, not only bureau-value cells:
+                // collection indicators can appear in an account-type row or label.
+                let accountTableText = grid.textContent || '';
                 Object.values(rows).forEach(row => {
-                    bureaus.map(b => b.toLowerCase()).forEach(bureau => {
-                        let cell = row.querySelector(`[data-field="${bureau}"]`);
-                        if (cell) {
-                            text += " " + ((cell.textContent || '').toLowerCase());
-                        }
+                    bureaus.forEach(bureau => {
+                        const cell = row.querySelector(`[data-field="${bureau.toLowerCase()}"]`);
+                        if (cell) accountTableText += ' ' + (cell.textContent || '');
                     });
                 });
-
-                const priority = [
-                    ["other collection agencies", "COLLECTION"],
-                    ["original creditor", "COLLECTION"],
-                    ["placed for collection", "COLLECTION"],
-                    ["repossessed", "Repossessed"],
-                    ["foreclosure", "Foreclosure"],
-                    ["REPOSSESSION", "Repossessed"],
-                    ["INVOLUNTARY REPOSSESSION", "Repossessed"],
-                    ["DEBT INCLUDED IN OR DISCHARGED THROUGH BANKRUPTCY", "INCLUDED IN BANKRUPTCY"],
-                    ["INCLUDED IN BANKRUPTCY", "INCLUDED IN BANKRUPTCY"],
-                    ["collection/charge off", "CHARGE OFF"],
-                    ["charge off", "CHARGE OFF"],
-                    ["charged off", "CHARGE OFF"],
-                    ["profit and loss", "CHARGE OFF"],
-                    ["write off", "CHARGE OFF"],
-                    ["LOSS BY CREDIT GRANTOR", "CHARGE OFF"],
-                    ["COLLECTION", "CHARGE OFF"],
-                    ["CHAPTER", "INCLUDED IN BANKRUPTCY"],
-                    ["transferred", "Transferred"],
-                    ["closed", "CLOSED LP"],
-                    ["open", "OPEN LP"],
-                    ["paid", "PAID LP"]
-                ];
-
-                let found = [];
-                for (const [keyword, result] of priority) {
-                    if (text.includes(keyword.toLowerCase())) {
-                        found.push(result);
-                    }
-                }
-
-                if (found.includes("INCLUDED IN BANKRUPTCY")) return "INCLUDED IN BANKRUPTCY";
-                if (found.includes("COLLECTION")) return "COLLECTION";
-                if (found.includes("CHARGE OFF")) return "CHARGE OFF";
-                if (found.includes("Repossessed")) return "Repossessed";
-                if (found.includes("Foreclosure")) return "Foreclosure";
-                if (found.includes("Bankruptcy")) return "Bankruptcy";
-                if (found.includes("Transferred")) return "Transferred";
-                if (found.includes("CLOSED LP")) return "CLOSED LP";
-                if (found.includes("OPEN LP")) return "OPEN LP";
-                if (found.includes("PAID LP")) return "PAID LP";
-
-                return "";
+                return classifyNegativeAccountType(accountName, accountTableText);
             }
 
             let balance = getBalanceValue();
@@ -2314,26 +2295,13 @@ Controls padding, font, spacing, and appearance for all 3
 
             let collectionWarning = "";
 
-const fullAccountText = (grid.textContent || '').toLowerCase();
-
-const collectionIndicators = [
-    "original creditor",
-    "placed for collection",
-    "other collection agencies",
-];
-
-const hasCollectionIndicator = collectionIndicators.some(keyword =>
-    fullAccountText.includes(keyword)
-);
-
-const knownCollectionAgency = isKnownCollectionAgency(accountName);
-
-if (
-    hasCollectionIndicator &&
-    !knownCollectionAgency
-) {
-    collectionWarning = "⚠ VERIFY COLLECTION ACCT";
-}
+            // For unfamiliar creditors with collection data, classify as
+            // CHARGE OFF but keep a verification note for manual review.
+            if (accountType === 'CHARGE OFF' &&
+                !isKnownCollectionAgency(accountName) &&
+                hasCollectionEvidence(grid.textContent || '')) {
+                collectionWarning = '⚠ VERIFY CHARGE OFF CLASSIFICATION';
+            }
 
             output.push({
                 account: accountName,
