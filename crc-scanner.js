@@ -2378,6 +2378,22 @@ Controls padding, font, spacing, and appearance for all 3
     }
 
 
+    // CRC sometimes puts a previous-address date in a separate label or
+    // appends it to the address. Neither layout should lose the date.
+    function parsePreviousAddressEntry(value) {
+        const text = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!text) return { address: '', date: '' };
+
+        const dateOnly = text.match(/^(?:(?:date|reported|updated|as of|from|since)\s*:?\s*)?((?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}(?:-\d{2})?)(?:\s*(?:-|–|—|to|through)\s*(?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}(?:-\d{2})?))?)$/i);
+        if (dateOnly) return { address: '', date: dateOnly[1] };
+
+        const inlineDate = text.match(/^(.+?)[\s,;|]+(?:(?:date|reported|as of)\s*:\s*)?((?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}(?:-\d{2})?)(?:\s*(?:-|–|—|to|through)\s*(?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}(?:-\d{2})?))?)$/i);
+        if (inlineDate && inlineDate[1].trim().length >= 7 && /\d/.test(inlineDate[1])) {
+            return { address: inlineDate[1].trim().replace(/[,;|\-]+\s*$/, ''), date: inlineDate[2] };
+        }
+        return { address: text, date: '' };
+    }
+
     // Read the PREVIOUS ADDRESS row from CRC's three-column report.
     // The address dates are separate labels and must not be treated as addresses.
     // Checked and unchecked items are both report data; selection is not a filter.
@@ -2393,35 +2409,35 @@ Controls padding, font, spacing, and appearance for all 3
             if (columns.length < 4) return;
 
             const heading = (columns[0].textContent || '').replace(/\s+/g, ' ').trim();
-            if (!/^PREVIOUS\s+ADDRESS(?:ES)?\s*:?\s*$/i.test(heading)) return;
+            if (!/^PREVIOUS\s+ADDRESS(?:ES|\(ES\))?\s*:?\s*$/i.test(heading)) return;
 
             bureaus.forEach((bureau, index) => {
                 const column = columns[index + 1];
                 if (!column) return;
-                const labels = column.querySelectorAll('label.MuiFormControlLabel-root');
-                const entries = labels.length ? labels : column.querySelectorAll('p.MuiTypography-body2');
-
+                // Collect adjacent date paragraphs as well as checkbox labels.
+                // A paragraph nested inside a label must not be processed twice.
+                const entries = column.querySelectorAll('label.MuiFormControlLabel-root, p.MuiTypography-body2');
                 let lastAddress = null;
                 entries.forEach(entry => {
+                    if (entry.matches('p.MuiTypography-body2') &&
+                        entry.closest('label.MuiFormControlLabel-root')) return;
                     const textNode = entry.querySelector('.MuiFormControlLabel-label') || entry;
-                    const value = (textNode.textContent || '').replace(/\s+/g, ' ').trim();
-                    if (!value) return;
-
-                    // Address dates are separate labels immediately after the address.
-                    if (/^(?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})$/.test(value)) {
-                        if (lastAddress && !lastAddress.date) lastAddress.date = value;
+                    const parsed = parsePreviousAddressEntry(textNode.textContent || '');
+                    if (parsed.date && !parsed.address) {
+                        if (lastAddress && !lastAddress.date) lastAddress.date = parsed.date;
                         return;
                     }
-                    if (/^\d{4}$/.test(value)) return;
+                    if (!parsed.address || /^\d{4}$/.test(parsed.address)) return;
 
-                    const key = value.toUpperCase();
+                    const key = parsed.address.toUpperCase();
                     const previous = addresses[bureau].find(item => item.address.toUpperCase() === key);
                     if (seen[bureau].has(key)) {
                         lastAddress = previous || null;
+                        if (lastAddress && parsed.date && !lastAddress.date) lastAddress.date = parsed.date;
                         return;
                     }
                     seen[bureau].add(key);
-                    lastAddress = { address: value, date: '' };
+                    lastAddress = { address: parsed.address, date: parsed.date };
                     addresses[bureau].push(lastAddress);
                 });
             });
@@ -2853,7 +2869,7 @@ function extractInquiries() {
                     card.textContent = crcDisplayMode === 'modern'
                         ? '- ' + String(item.address || '').trim().toUpperCase() +
                             (date ? ' ' + date : '') + '(' + suffix + ')'
-                        : item.address;
+                        : item.address + (date ? ' ' + date : '');
                     list.appendChild(card);
                 });
             }
@@ -2864,7 +2880,7 @@ function extractInquiries() {
             if (crcDisplayMode === 'legacy') {
                 copyText += bureau.title.toUpperCase() + ':\n';
                 copyText += items.length
-                    ? items.map(item => '- ' + item.address).join('\n') + '\n\n'
+                    ? items.map(item => '- ' + item.address + (item.date ? ' ' + item.date : '')).join('\n') + '\n\n'
                     : (kind === 'employer' ? '(No employers)\n\n' : '(No previous addresses)\n\n');
             } else {
                 items.forEach(item => {
