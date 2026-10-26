@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.2
+// @version      4.3
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -19,6 +19,7 @@
     const CRC_COPY_CONNECTED_INQUIRIES_KEY = 'tubol-crc-copy-connected-inquiries';
     const CRC_COPY_CONNECTED_NEW_KEY = 'tubol-crc-copy-connected-new-inquiries';
     const CRC_OPEN_NAMES_ONLY_KEY = 'tubol-crc-open-account-names-only';
+    const CRC_INQUIRY_BEFORE_DATE_KEY = 'tubol-crc-inquiry-before-date';
     function loadCrcBoolSetting(key, defaultValue) {
         try {
             const stored = localStorage.getItem(key);
@@ -32,6 +33,12 @@
     let crcCopyConnectedInquiries = loadCrcBoolSetting(CRC_COPY_CONNECTED_INQUIRIES_KEY, false);
     let crcCopyConnectedNew = loadCrcBoolSetting(CRC_COPY_CONNECTED_NEW_KEY, true);
     let crcOpenNamesOnly = loadCrcBoolSetting(CRC_OPEN_NAMES_ONLY_KEY, false);
+    // Blank means all inquiries; YYYY-MM-DD is an exclusive upper bound.
+    let crcInquiryBeforeDate = '';
+    try {
+        const saved = localStorage.getItem(CRC_INQUIRY_BEFORE_DATE_KEY) || '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(saved)) crcInquiryBeforeDate = saved;
+    } catch (_) { /* Date selection remains available this session. */ }
     function loadCrcDisplayMode() {
         try { return localStorage.getItem(CRC_DISPLAY_KEY) === 'legacy' ? 'legacy' : 'modern'; }
         catch (_) { return 'modern'; }
@@ -198,10 +205,10 @@ const CSS_STYLES = `
     left: 50%;
     transform: translate(-50%,-50%);
     z-index: 70;
-    width: min(740px, calc(100vw - 48px));
-    max-width: calc(100vw - 48px);
-    height: min(74vh, 690px);
-    max-height: calc(100vh - 48px);
+    width: min(1000px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    height: min(88vh, 860px);
+    max-height: calc(100vh - 24px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -210,7 +217,7 @@ const CSS_STYLES = `
     color: #e4e6eb;
     border: 1px solid #4a4b4c;
     border-radius: 12px;
-    padding: 16px;
+    padding: clamp(16px, 2.4vw, 28px);
     box-shadow: 0 12px 32px rgba(0,0,0,.5);
 }
 #crc-settings-menu[hidden] { display: none !important; }
@@ -2293,15 +2300,11 @@ Controls padding, font, spacing, and appearance for all 3
                 if (bureauSet.includes("transunion")) bureauDisplay += "TU - ";
             }
 
-            let collectionWarning = "";
-
-            // For unfamiliar creditors with collection data, classify as
-            // CHARGE OFF but keep a verification note for manual review.
-            if (accountType === 'CHARGE OFF' &&
-                !isKnownCollectionAgency(accountName) &&
-                hasCollectionEvidence(grid.textContent || '')) {
-                collectionWarning = '⚠ VERIFY CHARGE OFF CLASSIFICATION';
-            }
+            // Keep the red verification notice on COLLECTION records only.
+            // CHARGE OFF entries must not display a collection warning.
+            const collectionWarning = accountType === 'COLLECTION'
+                ? '⚠ VERIFY COLLECTION ACCT'
+                : '';
 
             output.push({
                 account: accountName,
