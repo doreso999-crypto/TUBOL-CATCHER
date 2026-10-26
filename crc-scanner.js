@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      3.9
+// @version      4.0
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    // Persist presentation/copy preferences only, never consumer or credit-report data.
+    // Save preferences and only creditor names users explicitly add to the alias dictionary; never save report details.
     const CRC_DISPLAY_KEY = 'tubol-crc-list-display-mode';
     const CRC_COPY_CONNECTED_INQUIRIES_KEY = 'tubol-crc-copy-connected-inquiries';
     const CRC_COPY_CONNECTED_NEW_KEY = 'tubol-crc-copy-connected-new-inquiries';
@@ -1529,22 +1529,142 @@ Controls padding, font, spacing, and appearance for all 3
             result = shorter;
         }
     }
+
+    const CREDITOR_DISPLAY_NAMES = {"capital_one":"Capital One","capital_one_auto":"Capital One Auto Finance","jpmorgan_chase":"JPMorgan Chase","chase_auto":"Chase Auto","citibank":"Citibank","wells_fargo":"Wells Fargo Bank","wells_fargo_auto":"Wells Fargo Auto","bank_of_america":"Bank of America","american_express":"American Express","discover":"Discover","credit_one":"Credit One Bank","synchrony":"Synchrony Bank","comenity_bank":"Comenity Bank","comenity_capital_bank":"Comenity Capital Bank","barclays":"Barclays Bank","td_bank":"TD Bank","us_bank":"U.S. Bank","pnc":"PNC Bank","fnbo":"First National Bank of Omaha","navy_federal":"Navy Federal Credit Union","penfed":"Pentagon Federal Credit Union","ally_auto":"Ally Auto Finance","santander_consumer":"Santander Consumer USA","toyota_finance":"Toyota Financial Services","honda_finance":"Honda Financial Services","acura_finance":"Acura Financial Services","nissan_finance":"Nissan Motor Acceptance","ford_credit":"Ford Motor Credit","gm_financial":"GM Financial","kia_finance":"Kia Finance","hyundai_finance":"Hyundai Motor Finance","carmax_auto_finance":"CarMax Auto Finance","bridgecrest":"Bridgecrest","synchrony_amazon_store":"Amazon Store Card / Synchrony","synchrony_lowes":"Lowe's / Synchrony","synchrony_paypal_credit":"PayPal Credit / Synchrony","synchrony_carecredit":"CareCredit / Synchrony","synchrony_jcpenney":"JCPenney / Synchrony","synchrony_verizon":"Verizon Card / Synchrony","capital_one_kohls":"Kohl's Card / Capital One","citi_best_buy":"Best Buy Card / Citi","citi_home_depot":"Home Depot Card / Citi","citi_macys":"Macy's Card / Citi","citi_costco":"Costco Anywhere Visa / Citi"};
+    const CRC_ALIAS_KEY = 'tubol-crc-alias-overrides-v1';
     const CREDITOR_ALIAS_INDEX = new Map();
-    CREDITOR_ALIAS_GROUPS.forEach(group => group.aliases.forEach(alias => {
-        const label = stripCreditorLegalSuffix(normalizeCreditorLabel(alias));
-        const previous = CREDITOR_ALIAS_INDEX.get(label);
-        if (previous && previous !== group.id) {
-            throw new Error('Conflicting creditor alias: ' + label);
+    const CREDITOR_BASE_INDEX = new Map();
+    const CREDITOR_DISABLED = new Set();
+    const CREDITOR_CUSTOM = new Map();
+
+    function creditorAliasKey(value) {
+        return normalizeCreditorLabel(value);
+    }
+    function loadCreditorOverrides() {
+        try {
+            const json = localStorage.getItem(CRC_ALIAS_KEY);
+            if (!json) return;
+            const stored = JSON.parse(json);
+            if (stored.version !== 1) return;
+            (Array.isArray(stored.disabled) ? stored.disabled : []).slice(0, 1000).forEach(value => {
+                if (typeof value === 'string' && value.length <= 100 && creditorAliasKey(value)) {
+                    CREDITOR_DISABLED.add(creditorAliasKey(value));
+                }
+            });
+            (Array.isArray(stored.custom) ? stored.custom : []).slice(0, 500).forEach(item => {
+                if (!item || typeof item.alias !== 'string' || !CREDITOR_DISPLAY_NAMES[item.groupId]) return;
+                const alias = item.alias.trim();
+                const key = creditorAliasKey(alias);
+                if (alias.length >= 2 && alias.length <= 100 && key) {
+                    CREDITOR_CUSTOM.set(key, { alias, groupId: item.groupId });
+                }
+            });
+        } catch (err) {
+            console.warn('Unable to load saved creditor alias settings', err);
         }
-        CREDITOR_ALIAS_INDEX.set(label, group.id);
-    }));
+    }
+    function rebuildCreditorIndex() {
+        CREDITOR_ALIAS_INDEX.clear();
+        CREDITOR_BASE_INDEX.clear();
+        CREDITOR_ALIAS_GROUPS.forEach(group => group.aliases.forEach(value => {
+            const raw = creditorAliasKey(value);
+            const simplified = stripCreditorLegalSuffix(raw);
+            if (!CREDITOR_BASE_INDEX.has(raw)) CREDITOR_BASE_INDEX.set(raw, group.id);
+            if (!CREDITOR_BASE_INDEX.has(simplified)) CREDITOR_BASE_INDEX.set(simplified, group.id);
+            if (CREDITOR_DISABLED.has(raw)) return;
+            if (!CREDITOR_ALIAS_INDEX.has(raw)) CREDITOR_ALIAS_INDEX.set(raw, group.id);
+            if (!CREDITOR_ALIAS_INDEX.has(simplified)) CREDITOR_ALIAS_INDEX.set(simplified, group.id);
+        }));
+        CREDITOR_CUSTOM.forEach((entry, key) => {
+            if (!CREDITOR_ALIAS_INDEX.has(key)) CREDITOR_ALIAS_INDEX.set(key, entry.groupId);
+        });
+    }
+    function resolveCreditorGroup(value) {
+        const raw = creditorAliasKey(value);
+        if (!raw || CREDITOR_DISABLED.has(raw)) return null;
+        return CREDITOR_ALIAS_INDEX.get(raw) ||
+            CREDITOR_ALIAS_INDEX.get(stripCreditorLegalSuffix(raw)) || null;
+    }
+    function listCreditorAliases(groupId) {
+        const group = CREDITOR_ALIAS_GROUPS.find(item => item.id === groupId);
+        if (!group) return [];
+        const entries = [];
+        group.aliases.forEach(alias => {
+            const key = creditorAliasKey(alias);
+            if (CREDITOR_DISABLED.has(key)) return;
+            const override = CREDITOR_CUSTOM.get(key);
+            if (override && override.groupId !== groupId) return;
+            entries.push({ alias, custom: false });
+        });
+        CREDITOR_CUSTOM.forEach((entry, key) => {
+            if (entry.groupId === groupId && !entries.some(item => creditorAliasKey(item.alias) === key)) {
+                entries.push({ alias: entry.alias, custom: true });
+            }
+        });
+        return entries.sort((a,b) => a.alias.localeCompare(b.alias));
+    }
+    function commitCreditorOverrideChange(callback) {
+        const disabledSnapshot = [...CREDITOR_DISABLED];
+        const customSnapshot = [...CREDITOR_CUSTOM];
+        callback();
+        try {
+            localStorage.setItem(CRC_ALIAS_KEY, JSON.stringify({
+                version: 1, disabled: [...CREDITOR_DISABLED], custom: [...CREDITOR_CUSTOM.values()]
+            }));
+        } catch (_) {
+            CREDITOR_DISABLED.clear();
+            disabledSnapshot.forEach(key => CREDITOR_DISABLED.add(key));
+            CREDITOR_CUSTOM.clear();
+            customSnapshot.forEach(([key, value]) => CREDITOR_CUSTOM.set(key, value));
+            return { ok: false, message: 'Could not save creditor aliases in browser storage.' };
+        }
+        rebuildCreditorIndex();
+        return { ok: true, message: 'Creditor aliases updated.' };
+    }
+    function addCreditorAlias(value, groupId) {
+        const alias = String(value || '').trim();
+        const key = creditorAliasKey(alias);
+        if (!CREDITOR_DISPLAY_NAMES[groupId]) return { ok:false, message:'Select a creditor.' };
+        if (!key || alias.length < 2 || alias.length > 100) return { ok:false, message:'Alias must be 2–100 characters.' };
+        const already = resolveCreditorGroup(alias);
+        if (already === groupId) return { ok:true, unchanged:true, message:'This variation already belongs to the selected creditor.' };
+        if (already && already !== groupId) {
+            return { ok:false, message:'Already assigned to ' + CREDITOR_DISPLAY_NAMES[already] + '. Remove it from that creditor first.' };
+        }
+        return commitCreditorOverrideChange(() => {
+            CREDITOR_DISABLED.delete(key);
+            if (CREDITOR_BASE_INDEX.get(key) === groupId) CREDITOR_CUSTOM.delete(key);
+            else CREDITOR_CUSTOM.set(key, { alias, groupId });
+        });
+    }
+    function deleteCreditorAlias(value, groupId) {
+        const key = creditorAliasKey(value);
+        if (!CREDITOR_DISPLAY_NAMES[groupId]) return { ok:false, message:'Unknown creditor.' };
+        if (key === creditorAliasKey(CREDITOR_DISPLAY_NAMES[groupId])) {
+            return { ok:false, message:'The main creditor name must remain available.' };
+        }
+        if (!listCreditorAliases(groupId).some(x => creditorAliasKey(x.alias) === key)) {
+            return { ok:false, message:'This variation is not active for that creditor.' };
+        }
+        const baseAlias = CREDITOR_ALIAS_GROUPS.some(group => group.id === groupId &&
+            group.aliases.some(alias => creditorAliasKey(alias) === key));
+        return commitCreditorOverrideChange(() => {
+            CREDITOR_CUSTOM.delete(key);
+            if (baseAlias) CREDITOR_DISABLED.add(key);
+        });
+    }
+    function resetCreditorAliases() {
+        return commitCreditorOverrideChange(() => { CREDITOR_DISABLED.clear(); CREDITOR_CUSTOM.clear(); });
+    }
+    loadCreditorOverrides();
+    rebuildCreditorIndex();
     function matchCreditorNames(inquiryCreditor, openAccountCreditor) {
         const inquiryName = stripCreditorLegalSuffix(normalizeCreditorLabel(inquiryCreditor));
         const accountName = stripCreditorLegalSuffix(normalizeCreditorLabel(openAccountCreditor));
         if (!inquiryName || !accountName) return false;
 
-        const inquiryGroup = CREDITOR_ALIAS_INDEX.get(inquiryName);
-        const accountGroup = CREDITOR_ALIAS_INDEX.get(accountName);
+        const inquiryGroup = resolveCreditorGroup(inquiryCreditor);
+        const accountGroup = resolveCreditorGroup(openAccountCreditor);
         // If either creditor is in the registry, both MUST belong to the
         // same specific group. A parent bank alone cannot match a store card.
         if (inquiryGroup || accountGroup) {
