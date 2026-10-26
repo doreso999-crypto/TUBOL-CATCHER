@@ -3003,7 +3003,7 @@ function extractInquiries() {
             { title: "TransUnion", items: inquiries.filter(i => i.transunion) }
         ];
 
-        let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries", crcCopyConnectedInquiries);
+        let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries", crcCopyConnectedInquiries, openInquiryAliasDialog);
 
         // ========================================
         // NEW INQUIRIES (today back to 35 days ago)
@@ -3017,7 +3017,7 @@ function extractInquiries() {
             { title: "TransUnion", items: newInquiries.filter(i => i.transunion) }
         ];
 
-        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", crcCopyConnectedNew);
+        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", crcCopyConnectedNew, openInquiryAliasDialog);
 
         btnNewInquiries.textContent = `NEW (${newInquiries.length})`;
 
@@ -3073,6 +3073,114 @@ function extractInquiries() {
         }
 
         renderOpenAccounts();
+
+
+        // Recompute badges and both clipboard variants without rescanning.
+        function updateInquiryAliasHighlights() {
+            inquiries.forEach(item => {
+                item.connectedToOpen = isInquiryConnectedToOpenAccount(item.creditor, item.bureauKey, openAccountsByBureau);
+            });
+            inquiriesView.replaceChildren();
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
+            newInquiriesView.replaceChildren();
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog);
+            updateInquiryCopyNote();
+            panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
+        }
+
+        const aliasList = panel.querySelector('#crc-alias-list');
+        const aliasSearch = panel.querySelector('#crc-alias-search');
+        const aliasDialog = panel.querySelector('#crc-alias-overlay');
+        const aliasTarget = panel.querySelector('#crc-alias-target');
+        const aliasFeedback = panel.querySelector('#crc-alias-feedback');
+        const aliasGroupsSorted = [...CREDITOR_ALIAS_GROUPS].sort((a,b) =>
+            CREDITOR_DISPLAY_NAMES[a.id].localeCompare(CREDITOR_DISPLAY_NAMES[b.id]));
+        let selectedInquiryAlias = '';
+
+        function renderAliasSettings() {
+            const query = normalizeCreditorLabel(aliasSearch.value);
+            const expanded = new Set([...aliasList.querySelectorAll('details[open]')].map(el => el.dataset.group));
+            aliasList.replaceChildren();
+            aliasGroupsSorted.forEach(group => {
+                const displayName = CREDITOR_DISPLAY_NAMES[group.id];
+                const variants = listCreditorAliases(group.id);
+                if (query && !normalizeCreditorLabel(displayName).includes(query) &&
+                    !variants.some(v => normalizeCreditorLabel(v.alias).includes(query))) return;
+                const details = document.createElement('details');
+                details.className = 'crc-alias-entity';
+                details.dataset.group = group.id;
+                details.open = Boolean(query) || expanded.has(group.id);
+                const title = document.createElement('summary');
+                title.textContent = displayName + ' (' + variants.length + ')';
+                details.appendChild(title);
+                variants.forEach(variant => {
+                    const row = document.createElement('div');
+                    row.className = 'crc-alias-variation' + (variant.custom ? ' crc-alias-custom' : '');
+                    row.textContent = variant.alias + (variant.custom ? ' · custom' : '');
+                    row.title = 'Right-click to delete this variation';
+                    row.addEventListener('contextmenu', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (!window.confirm('Remove "' + variant.alias + '" from ' + displayName + '?')) return;
+                        const outcome = deleteCreditorAlias(variant.alias, group.id);
+                        if (!outcome.ok) window.alert(outcome.message);
+                        else { renderAliasSettings(); updateInquiryAliasHighlights(); }
+                    });
+                    details.appendChild(row);
+                });
+                aliasList.appendChild(details);
+            });
+            if (!aliasList.children.length) {
+                const none = document.createElement('div');
+                none.className = 'crc-settings-note';
+                none.textContent = 'No creditors match this search.';
+                aliasList.appendChild(none);
+            }
+        }
+        aliasSearch.addEventListener('input', renderAliasSettings);
+        panel.querySelector('#crc-alias-reset').addEventListener('click', () => {
+            if (!window.confirm('Remove all custom aliases and restore the original list?')) return;
+            const result = resetCreditorAliases();
+            if (!result.ok) window.alert(result.message);
+            else { renderAliasSettings(); updateInquiryAliasHighlights(); }
+        });
+        function closeInquiryAliasDialog() {
+            aliasDialog.hidden = true;
+            selectedInquiryAlias = '';
+        }
+        function openInquiryAliasDialog(item) {
+            selectedInquiryAlias = String(item?.creditor || '').trim();
+            if (!selectedInquiryAlias) return;
+            aliasTarget.replaceChildren();
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Select a creditor...';
+            aliasTarget.appendChild(placeholder);
+            aliasGroupsSorted.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group.id;
+                option.textContent = CREDITOR_DISPLAY_NAMES[group.id];
+                aliasTarget.appendChild(option);
+            });
+            aliasTarget.value = resolveCreditorGroup(selectedInquiryAlias) || '';
+            panel.querySelector('#crc-alias-name').textContent = 'Inquiry: ' + selectedInquiryAlias;
+            aliasFeedback.textContent = 'Select the correct creditor. Saved aliases affect matching in all reports on this browser.';
+            aliasDialog.hidden = false;
+            aliasTarget.focus();
+        }
+        panel.querySelector('#crc-alias-cancel').addEventListener('click', closeInquiryAliasDialog);
+        panel.querySelector('#crc-alias-save').addEventListener('click', () => {
+            const result = addCreditorAlias(selectedInquiryAlias, aliasTarget.value);
+            aliasFeedback.textContent = result.message;
+            if (!result.ok) return;
+            renderAliasSettings();
+            updateInquiryAliasHighlights();
+            closeInquiryAliasDialog();
+        });
+        aliasDialog.addEventListener('click', e => {
+            if (e.target === aliasDialog) closeInquiryAliasDialog();
+        });
+        renderAliasSettings();
 
         // Subtab switching
         function updateInquiryCopyNote() {
@@ -3142,16 +3250,16 @@ function extractInquiries() {
             copyTextPersonalInfo = renderPersonalInfo(addressesDiv, employersDiv, previousAddresses, employers);
 
             inquiriesView.replaceChildren();
-            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries);
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
 
             newInquiriesView.replaceChildren();
-            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew);
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog);
         });
         copyConnectedInput.addEventListener('change', () => {
             crcCopyConnectedInquiries = copyConnectedInput.checked;
             saveCrcBoolSetting(CRC_COPY_CONNECTED_INQUIRIES_KEY, crcCopyConnectedInquiries);
             inquiriesView.replaceChildren();
-            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries);
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
         });
@@ -3159,7 +3267,7 @@ function extractInquiries() {
             crcCopyConnectedNew = copyConnectedNewInput.checked;
             saveCrcBoolSetting(CRC_COPY_CONNECTED_NEW_KEY, crcCopyConnectedNew);
             newInquiriesView.replaceChildren();
-            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew);
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog);
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
         });
