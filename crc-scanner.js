@@ -3043,6 +3043,115 @@ function extractInquiries() {
         return [addressText, 'EMPLOYERS:\n' + employerText].filter(Boolean).join('\n\n');
     }
 
+
+    // Keep a floating panel fully on screen, including after minimizing,
+    // maximizing and browser-window resizing.
+    function clampExtractorPosition(left, top, panelWidth, panelHeight, viewportWidth, viewportHeight) {
+        return {
+            left: Math.min(Math.max(0, left), Math.max(0, viewportWidth - panelWidth)),
+            top: Math.min(Math.max(0, top), Math.max(0, viewportHeight - panelHeight))
+        };
+    }
+
+    function installExtractorDragging(panel) {
+        const bar = panel.querySelector('#crc-top-bar');
+        let activePointerId = null;
+        let dragOrigin = null;
+        let pointerStart = null;
+
+        function movePanel(left, top) {
+            const rect = panel.getBoundingClientRect();
+            const viewportWidth = window.innerWidth || document.documentElement.clientWidth;
+            const viewportHeight = window.innerHeight || document.documentElement.clientHeight;
+            const constrained = clampExtractorPosition(
+                left, top, rect.width, rect.height, viewportWidth, viewportHeight
+            );
+            panel.style.left = constrained.left + 'px';
+            panel.style.top = constrained.top + 'px';
+            panel.style.right = 'auto';
+            panel.style.bottom = 'auto';
+            return constrained;
+        }
+        function currentPosition() {
+            const rect = panel.getBoundingClientRect();
+            return { left: rect.left, top: rect.top };
+        }
+        function reclamp() {
+            const current = currentPosition();
+            return movePanel(current.left, current.top);
+        }
+        function savePosition() {
+            try {
+                localStorage.setItem(CRC_PANEL_POSITION_KEY, JSON.stringify(currentPosition()));
+            } catch (_) { /* Keep the on-screen position for this session. */ }
+        }
+        // Position survives rescans/reloads but is always constrained to the
+        // available viewport, so users cannot accidentally lose the panel.
+        let savedPosition = null;
+        try {
+            const stored = JSON.parse(localStorage.getItem(CRC_PANEL_POSITION_KEY) || 'null');
+            if (stored && Number.isFinite(stored.left) && Number.isFinite(stored.top)) savedPosition = stored;
+        } catch (_) { /* Use default upper-right position. */ }
+        if (savedPosition) movePanel(savedPosition.left, savedPosition.top);
+        else reclamp();
+
+        function pointerDown(event) {
+            // Only a primary-button drag on the top bar moves the extractor.
+            // Settings/minimize/close controls remain clickable, and body text
+            // retains selection, scrolling, right-click, and other interactions.
+            if (event.button !== 0 || activePointerId !== null) return;
+            if (!panel.querySelector('#crc-settings-menu').hidden) return;
+            const clickedControl = event.target.closest?.(
+                'button, input, select, textarea, a, [role="dialog"], #crc-settings-backdrop'
+            );
+            if (clickedControl) return;
+            activePointerId = event.pointerId;
+            pointerStart = { x: event.clientX, y: event.clientY };
+            dragOrigin = currentPosition();
+            bar.classList.add('crc-dragging');
+            try { bar.setPointerCapture?.(event.pointerId); }
+            catch (_) { /* The pointer remains usable without capture. */ }
+            event.preventDefault();
+        }
+        function pointerMove(event) {
+            if (event.pointerId !== activePointerId || !pointerStart) return;
+            movePanel(
+                dragOrigin.left + event.clientX - pointerStart.x,
+                dragOrigin.top + event.clientY - pointerStart.y
+            );
+            event.preventDefault();
+        }
+        function pointerEnd(event) {
+            if (event.pointerId !== activePointerId) return;
+            activePointerId = null;
+            dragOrigin = null;
+            pointerStart = null;
+            bar.classList.remove('crc-dragging');
+            try {
+                if (bar.hasPointerCapture?.(event.pointerId)) bar.releasePointerCapture(event.pointerId);
+            } catch (_) { /* Pointer already released. */ }
+            savePosition();
+        }
+        function handleResize() {
+            reclamp();
+            savePosition();
+        }
+        bar.addEventListener('pointerdown', pointerDown);
+        bar.addEventListener('pointermove', pointerMove);
+        bar.addEventListener('pointerup', pointerEnd);
+        bar.addEventListener('pointercancel', pointerEnd);
+        window.addEventListener('resize', handleResize);
+        function destroy() {
+            window.removeEventListener('resize', handleResize);
+            bar.removeEventListener('pointerdown', pointerDown);
+            bar.removeEventListener('pointermove', pointerMove);
+            bar.removeEventListener('pointerup', pointerEnd);
+            bar.removeEventListener('pointercancel', pointerEnd);
+        }
+        panel.__crcDisposeDrag = destroy;
+        return { reclamp, destroy };
+    }
+
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
         let openAccountsData = extractOpenAccounts();
@@ -3080,13 +3189,18 @@ function extractInquiries() {
         });
 
         let old = document.getElementById("crc-negative-panel");
-        if (old) old.remove();
+        if (old) {
+            old.__crcDisposeDrag?.();
+            old.remove();
+        }
 
         let panel = document.createElement("div");
         panel.id = "crc-negative-panel";
         panel.innerHTML = HTML_TEMPLATE;
         panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
         document.body.appendChild(panel);
+        panel.style.opacity = String(crcPanelOpacity / 100);
+        const dragControls = installExtractorDragging(panel);
 
         // Update counters
         panel.querySelector('[data-negative-count]').textContent = negativeData.length;
@@ -3579,6 +3693,13 @@ function extractInquiries() {
         const copyConnectedInput = panel.querySelector('#crc-copy-connected-inquiries');
         const copyConnectedNewInput = panel.querySelector('#crc-copy-connected-new');
         const openNamesOnlyInput = panel.querySelector('#crc-open-names-only');
+        const panelOpacityInput = panel.querySelector('#crc-panel-opacity');
+        const panelOpacityValue = panel.querySelector('#crc-panel-opacity-value');
+        panelOpacityInput.value = String(crcPanelOpacity);
+        panelOpacityValue.textContent = crcPanelOpacity + '%';
+        panelOpacityInput.addEventListener('input', () => {
+            panelOpacityValue.textContent = applyPanelOpacity(panel, panelOpacityInput.value) + '%';
+        });
         formatSelect.value = crcDisplayMode;
         copyConnectedInput.checked = crcCopyConnectedInquiries;
         copyConnectedNewInput.checked = crcCopyConnectedNew;
@@ -3675,6 +3796,7 @@ function extractInquiries() {
 
         panel.querySelector("#crc-close-btn").onclick = function() {
             setSettingsOpen(false);
+            dragControls.destroy();
             panel.remove();
         };
 
@@ -3682,6 +3804,8 @@ function extractInquiries() {
             setSettingsOpen(false);
             panel.classList.toggle("crc-minimized");
             this.textContent = panel.classList.contains("crc-minimized") ? "+" : "−";
+            // The window is draggable from its top bar in either state.
+            dragControls.reclamp();
         };
 
         // ========================================
