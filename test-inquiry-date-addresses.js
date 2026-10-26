@@ -34,7 +34,7 @@ assert(src.includes("dateFilterWrap.hidden = view !== 'inquiries';"),
 assert(src.includes("filterInquiriesBeforeDate(inquiries, crcInquiryBeforeDate)"),
     'Cutoff must affect rendered inquiry groups (and copy output)');
 
-const parseAndExtract = section('    // Address dates may be separate elements or',
+const parseAndExtract = section('    // CRC sometimes puts a previous-address date in a separate label or',
     '    function extractEmployers() {');
 const makeEntry = (value, paragraph = false) => ({
     textContent: value,
