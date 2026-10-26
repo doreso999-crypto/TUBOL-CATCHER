@@ -1576,6 +1576,7 @@ Controls padding, font, spacing, and appearance for all 3
         return normalizeCreditorLabel(value);
     }
     function loadCreditorOverrides() {
+        if (typeof localStorage === 'undefined') return;
         try {
             const json = localStorage.getItem(CRC_ALIAS_KEY);
             if (!json) return;
