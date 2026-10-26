@@ -254,6 +254,23 @@ const CSS_STYLES = `
     margin: 1px 0 0;
     accent-color: #2374e1;
 }
+
+#crc-alias-search, #crc-alias-target { width: 100%; box-sizing: border-box; background: #18191a; color: #e4e6eb; padding: 9px; border: 1px solid #55585b; border-radius: 8px; margin: 8px 0; }
+#crc-alias-list { max-height: 250px; overflow-y: auto; background: #18191a; padding: 5px; border: 1px solid #44484b; border-radius: 8px; }
+.crc-alias-entity { margin-bottom: 5px; border: 1px solid #353638; border-radius: 6px; }
+.crc-alias-entity summary { cursor: pointer; font-size: 12px; font-weight: 700; padding: 8px; }
+.crc-alias-variation { cursor: context-menu; font-size: 12px; padding: 6px 10px; border-top: 1px solid #353638; overflow-wrap: anywhere; }
+.crc-alias-variation:hover { background: #3a3b3c; }
+.crc-alias-custom { color: #95caff; }
+#crc-alias-reset { border-radius: 7px; padding: 8px; cursor: pointer; color: #ddd; background: transparent; border: 1px solid #55585b; margin-top: 8px; }
+.crc-alias-overlay[hidden] { display: none !important; }
+.crc-alias-overlay { position: absolute; inset: 0; z-index: 100; padding: 15px; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; }
+.crc-alias-card { background: #242526; border: 1px solid #53575a; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
+.crc-alias-card h3 { margin: 0 0 8px; }
+#crc-alias-name { font-size: 13px; margin: 8px 0; overflow-wrap: anywhere; }
+.crc-alias-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.crc-alias-actions button { cursor: pointer; color: #fff; background: #3a3b3c; border: 0; padding: 9px 12px; border-radius: 7px; }
+.crc-alias-actions .crc-alias-primary { background: #2374e1; }
 #crc-open-accounts-copy-all {
     display: block;
     width: 100%;
@@ -1395,6 +1412,11 @@ Controls padding, font, spacing, and appearance for all 3
                     <span>Show and copy creditor names only</span>
                 </label>
                 <div class="crc-settings-note">All settings are saved on this device. Open Accounts still includes every extracted account.</div>
+                <div class="crc-settings-section-title">Creditor Name Variations</div>
+                <div class="crc-settings-note">Expand any creditor to see its names. Right-click a variation to remove it. Right-click an INQUIRIES or NEW inquiry to add its name to a creditor.</div>
+                <input type="search" id="crc-alias-search" placeholder="Search creditor names" aria-label="Search creditor names">
+                <div id="crc-alias-list" aria-label="Creditor alias manager"></div>
+                <button type="button" id="crc-alias-reset">Restore default aliases</button>
             </div>
             <div id="crc-window-controls">
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
@@ -1402,6 +1424,19 @@ Controls padding, font, spacing, and appearance for all 3
             </div>
         </div>
 
+        <div class="crc-alias-overlay" id="crc-alias-overlay" role="dialog" aria-modal="true" aria-label="Assign inquiry creditor" hidden>
+            <div class="crc-alias-card">
+                <h3>Add inquiry variation</h3>
+                <div id="crc-alias-name"></div>
+                <label for="crc-alias-target">Assign to creditor</label>
+                <select id="crc-alias-target"></select>
+                <div id="crc-alias-feedback" class="crc-settings-note">Select the correct creditor. This alias will apply across reports in this browser.</div>
+                <div class="crc-alias-actions">
+                    <button type="button" id="crc-alias-cancel">Cancel</button>
+                    <button type="button" id="crc-alias-save" class="crc-alias-primary">Add alias</button>
+                </div>
+            </div>
+        </div>
         <!-- HEADER DIVIDER -->
         <div id="crc-header-divider"></div>
 
@@ -2574,7 +2609,7 @@ function extractInquiries() {
     // items by default; NEW includes connected recent inquiries.
     // ========================================
 
-    function renderInquiryBureauGroups(container, groups, emptyLabel, includeConnectedInCopy = false) {
+    function renderInquiryBureauGroups(container, groups, emptyLabel, includeConnectedInCopy = false, onContext = null) {
         let copyText = '';
 
         groups.forEach(group => {
@@ -2611,7 +2646,11 @@ function extractInquiries() {
                     const inquiry = document.createElement('div');
                     inquiry.className = 'crc-inquiry-row ' +
                         (connected ? 'crc-inq-connected' : 'crc-inq-unconnected');
-                    inquiry.title = connected ? 'Creditor name or verified alias matches an OPEN account on this bureau; does not establish inquiry authorization' : 'No reliable same-bureau OPEN-account match found';
+                    inquiry.title = (connected ? 'Possible same-bureau creditor match' : 'No reliable same-bureau OPEN match') + ' · Right-click to assign a creditor alias';
+                    if (onContext) inquiry.addEventListener('contextmenu', event => {
+                        event.preventDefault();
+                        onContext(item);
+                    });
                     const topRow = document.createElement('div');
                     topRow.className = 'crc-inquiry-top-row';
                     const creditor = document.createElement('div');
