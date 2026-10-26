@@ -157,6 +157,16 @@ const CSS_STYLES = `
 }
 
 
+/* Modern entries may be long: show the full address or creditor/date/code line. */
+#crc-negative-panel.crc-modern-display .crc-inquiry-creditor {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+    font-size: 12px;
+    line-height: 1.5;
+}
+
 /* List display mode popover */
 #crc-top-bar { position: relative; }
 #crc-settings-menu {
@@ -2490,6 +2500,7 @@ function extractInquiries() {
         let panel = document.createElement("div");
         panel.id = "crc-negative-panel";
         panel.innerHTML = HTML_TEMPLATE;
+        panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
         document.body.appendChild(panel);
 
         // Update counters
@@ -2747,6 +2758,7 @@ function extractInquiries() {
         });
         formatSelect.addEventListener('change', () => {
             saveCrcDisplayMode(formatSelect.value);
+            panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
 
             addressesDiv.replaceChildren();
             copyTextAddresses = renderPreviousAddresses(addressesDiv, previousAddresses);
