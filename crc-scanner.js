@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      3.5
+// @version      3.6
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -13,6 +13,19 @@
     // Prevent double-install when script is injected multiple times
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
+
+    // Persist only list format, never consumer or credit-report data.
+    const CRC_DISPLAY_KEY = 'tubol-crc-list-display-mode';
+    function loadCrcDisplayMode() {
+        try { return localStorage.getItem(CRC_DISPLAY_KEY) === 'legacy' ? 'legacy' : 'modern'; }
+        catch (_) { return 'modern'; }
+    }
+    let crcDisplayMode = loadCrcDisplayMode();
+    function saveCrcDisplayMode(mode) {
+        crcDisplayMode = mode === 'legacy' ? 'legacy' : 'modern';
+        try { localStorage.setItem(CRC_DISPLAY_KEY, crcDisplayMode); }
+        catch (_) { /* Remain in the selected mode for this session. */ }
+    }
     // ========================================
     // JSON DATA
     // ========================================
@@ -143,6 +156,52 @@ const CSS_STYLES = `
     transform: scale(.94);
 }
 
+
+/* List display mode popover */
+#crc-top-bar { position: relative; }
+#crc-settings-menu {
+    position: absolute;
+    top: calc(100% - 2px);
+    left: 12px;
+    z-index: 50;
+    width: min(350px, calc(100% - 24px));
+    box-sizing: border-box;
+    background: #242526;
+    color: #e4e6eb;
+    border: 1px solid #4a4b4c;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 12px 32px rgba(0,0,0,.5);
+}
+#crc-settings-menu[hidden] { display: none !important; }
+#crc-settings-menu .crc-settings-heading {
+    font-size: 15px;
+    font-weight: 800;
+    margin-bottom: 14px;
+}
+#crc-settings-menu label {
+    display: block;
+    font-size: 13px;
+    font-weight: 700;
+}
+#crc-settings-menu select {
+    display: block;
+    width: 100%;
+    margin: 8px 0 12px;
+    min-height: 40px;
+    padding: 8px 9px;
+    background: #18191a;
+    color: #e4e6eb;
+    border: 1px solid #55585b;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+}
+#crc-settings-menu .crc-settings-note {
+    color: #b0b3b8;
+    font-size: 12px;
+    line-height: 1.5;
+}
 
 /* =========================================================
    WINDOW CONTROLS
@@ -1241,7 +1300,16 @@ Controls padding, font, spacing, and appearance for all 3
     const HTML_TEMPLATE = `
         <!-- TOP BAR -->
         <div id="crc-top-bar">
-            <button id="crc-settings-btn" title="Settings">⚙</button>
+            <button id="crc-settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false" aria-controls="crc-settings-menu">⚙</button>
+            <div id="crc-settings-menu" role="region" aria-label="Scanner settings" hidden>
+                <div class="crc-settings-heading">Settings</div>
+                <label for="crc-display-mode">List Display Format</label>
+                <select id="crc-display-mode">
+                    <option value="modern">Modern — Uppercase + (EXP/EQU/TU)</option>
+                    <option value="legacy">Legacy Display — Original grouped lists</option>
+                </select>
+                <div class="crc-settings-note">Applies to visible lists and copied output for Inquiries, New Inquiries and Previous Addresses. Negative and Open Accounts are unchanged. Preference is saved.</div>
+            </div>
             <div id="crc-window-controls">
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
                 <button id="crc-close-btn" class="crc-window-btn" title="Close">✕</button>
@@ -2215,77 +2283,66 @@ function extractInquiries() {
     // ========================================
 
     function renderInquiryBureauGroups(container, groups, emptyLabel) {
-        let copyText = "";
+        let copyText = '';
 
         groups.forEach(group => {
-            const section = document.createElement("div");
-            section.className = "crc-inquiry-section";
-
-            const header = document.createElement("div");
-            header.className = "crc-inquiry-bureau";
-
-            const headerTitle = document.createElement("span");
-            headerTitle.textContent = `${group.title} (${group.items.length})`;
-
-            const headerArrow = document.createElement("span");
-            headerArrow.className = "crc-inquiry-bureau-arrow";
-            headerArrow.textContent = "▾";
-
+            const code = group.title === 'Experian' ? 'EXP'
+                : group.title === 'Equifax' ? 'EQU' : 'TU';
+            const section = document.createElement('div');
+            section.className = 'crc-inquiry-section';
+            const header = document.createElement('div');
+            header.className = 'crc-inquiry-bureau';
+            const headerTitle = document.createElement('span');
+            headerTitle.textContent = group.title + ' (' + group.items.length + ')';
+            const headerArrow = document.createElement('span');
+            headerArrow.className = 'crc-inquiry-bureau-arrow';
+            headerArrow.textContent = '▾';
             header.appendChild(headerTitle);
             header.appendChild(headerArrow);
-
-            header.addEventListener("click", function() {
-                section.classList.toggle("crc-collapsed");
-            });
-
+            header.addEventListener('click', function() { section.classList.toggle('crc-collapsed'); });
             section.appendChild(header);
 
-            const itemsWrap = document.createElement("div");
-            itemsWrap.className = "crc-inquiry-items";
-
-            let unconnectedInGroup = [];
+            const itemsWrap = document.createElement('div');
+            itemsWrap.className = 'crc-inquiry-items';
+            const unconnectedInGroup = [];
 
             if (group.items.length === 0) {
-                const none = document.createElement("div");
-                none.className = "crc-inquiry-none";
-                none.textContent = emptyLabel || "No inquiries";
+                const none = document.createElement('div');
+                none.className = 'crc-inquiry-none';
+                none.textContent = emptyLabel || 'No inquiries';
                 itemsWrap.appendChild(none);
             } else {
                 group.items.forEach(item => {
                     const connected = item.connectedToOpen === true;
+                    if (!connected) unconnectedInGroup.push(item);
 
-                    if (!connected) {
-                        unconnectedInGroup.push(item);
-                    }
+                    const inquiry = document.createElement('div');
+                    inquiry.className = 'crc-inquiry-row ' +
+                        (connected ? 'crc-inq-connected' : 'crc-inq-unconnected');
+                    inquiry.title = connected ? 'Connected to Open Account' : 'Not Connected to Open Account';
+                    const topRow = document.createElement('div');
+                    topRow.className = 'crc-inquiry-top-row';
+                    const creditor = document.createElement('div');
+                    creditor.className = 'crc-inquiry-creditor';
+                    const name = String(item.creditor || '(No creditor)').trim();
+                    const dateValue = String(item.date || '').trim();
+                    creditor.textContent = crcDisplayMode === 'modern'
+                        ? '- ' + name.toUpperCase() + (dateValue ? ' ' + dateValue : '') + '(' + code + ')'
+                        : name;
 
-                    const inquiry = document.createElement("div");
-                    inquiry.className = "crc-inquiry-row " +
-                        (connected ? "crc-inq-connected" : "crc-inq-unconnected");
-                    inquiry.title = connected
-                        ? "Connected to Open Account"
-                        : "Not Connected to Open Account";
-
-                    const topRow = document.createElement("div");
-                    topRow.className = "crc-inquiry-top-row";
-
-                    const creditor = document.createElement("div");
-                    creditor.className = "crc-inquiry-creditor";
-                    creditor.textContent = item.creditor || "(No creditor)";
-
-                    const status = document.createElement("div");
-                    status.className = "crc-inquiry-status";
-                    status.textContent = (item.action && /already disputed/i.test(item.action)) ? "AD" : "ND";
-
+                    const status = document.createElement('div');
+                    status.className = 'crc-inquiry-status';
+                    status.textContent = item.action && /already disputed/i.test(item.action) ? 'AD' : 'ND';
                     topRow.appendChild(creditor);
                     topRow.appendChild(status);
-
-                    const date = document.createElement("div");
-                    date.className = "crc-inquiry-date";
-                    date.textContent = item.date || "";
-
                     inquiry.appendChild(topRow);
-                    inquiry.appendChild(date);
 
+                    if (crcDisplayMode === 'legacy') {
+                        const date = document.createElement('div');
+                        date.className = 'crc-inquiry-date';
+                        date.textContent = item.date || '';
+                        inquiry.appendChild(date);
+                    }
                     itemsWrap.appendChild(inquiry);
                 });
             }
@@ -2293,19 +2350,28 @@ function extractInquiries() {
             section.appendChild(itemsWrap);
             container.appendChild(section);
 
-            // Copy unconnected inquiries as uppercase lines with compact bureau suffixes.
-            const code = group.title === 'Experian' ? 'EXP'
-                : group.title === 'Equifax' ? 'EQU' : 'TU';
-            unconnectedInGroup.forEach(item => {
-                const creditor = String(item.creditor || '(No creditor)').trim().toUpperCase();
-                const date = String(item.date || '').trim();
-                copyText += `- ${creditor}${date ? ' ' + date : ''}(${code})\n`;
-            });
+            if (crcDisplayMode === 'legacy') {
+                copyText += group.title.toUpperCase() + ':\n\n';
+                if (!unconnectedInGroup.length) {
+                    copyText += '(No unconnected inquiries)\n\n';
+                } else {
+                    unconnectedInGroup.forEach(item => {
+                        copyText += '- ' + (item.creditor || '(No creditor)').toLowerCase() +
+                            ' ' + (item.date || '') + '\n';
+                    });
+                    copyText += '\n';
+                }
+            } else {
+                unconnectedInGroup.forEach(item => {
+                    const creditorName = String(item.creditor || '(No creditor)').trim().toUpperCase();
+                    const dateValue = String(item.date || '').trim();
+                    copyText += '- ' + creditorName + (dateValue ? ' ' + dateValue : '') +
+                        '(' + code + ')\n';
+                });
+            }
         });
-
         return copyText.trim();
     }
-
 
     // Use the same collapsible, bureau-grouped presentation as inquiries.
     function renderPreviousAddresses(container, addresses) {
@@ -2316,9 +2382,9 @@ function extractInquiries() {
             { code: 'TU', title: 'TransUnion' }
         ].forEach(bureau => {
             const items = addresses[bureau.code] || [];
+            const suffix = bureau.code === 'EX' ? 'EXP' : bureau.code;
             const section = document.createElement('div');
             section.className = 'crc-inquiry-section';
-
             const header = document.createElement('div');
             header.className = 'crc-inquiry-bureau';
             header.setAttribute('role', 'button');
@@ -2332,7 +2398,6 @@ function extractInquiries() {
             arrow.textContent = '▾';
             header.appendChild(title);
             header.appendChild(arrow);
-
             const toggle = () => {
                 const collapsed = section.classList.toggle('crc-collapsed');
                 header.setAttribute('aria-expanded', String(!collapsed));
@@ -2347,16 +2412,20 @@ function extractInquiries() {
 
             const list = document.createElement('div');
             list.className = 'crc-inquiry-items';
-            if (items.length === 0) {
+            if (!items.length) {
                 const empty = document.createElement('div');
                 empty.className = 'crc-inquiry-none';
                 empty.textContent = 'No previous addresses';
                 list.appendChild(empty);
             } else {
-                items.forEach(address => {
+                items.forEach(item => {
                     const card = document.createElement('div');
                     card.className = 'crc-previous-address-card';
-                    card.textContent = address.address;
+                    const date = String(item.date || '').trim();
+                    card.textContent = crcDisplayMode === 'modern'
+                        ? '- ' + String(item.address || '').trim().toUpperCase() +
+                            (date ? ' ' + date : '') + '(' + suffix + ')'
+                        : item.address;
                     list.appendChild(card);
                 });
             }
@@ -2364,12 +2433,18 @@ function extractInquiries() {
             section.appendChild(list);
             container.appendChild(section);
 
-            const suffix = bureau.code === 'EX' ? 'EXP' : bureau.code;
-            items.forEach(item => {
-                const address = String(item.address || '').trim().toUpperCase();
-                const date = String(item.date || '').trim();
-                copyText += `- ${address}${date ? ' ' + date : ''}(${suffix})\n`;
-            });
+            if (crcDisplayMode === 'legacy') {
+                copyText += bureau.title.toUpperCase() + ':\n';
+                copyText += items.length
+                    ? items.map(item => '- ' + item.address).join('\n') + '\n\n'
+                    : '(No previous addresses)\n\n';
+            } else {
+                items.forEach(item => {
+                    const address = String(item.address || '').trim().toUpperCase();
+                    const date = String(item.date || '').trim();
+                    copyText += '- ' + address + (date ? ' ' + date : '') + '(' + suffix + ')\n';
+                });
+            }
         });
         return copyText.trim();
     }
@@ -2478,7 +2553,7 @@ function extractInquiries() {
         // ========================================
 
         const addressesDiv = panel.querySelector('#crc-previous-addresses');
-        const copyTextAddresses = renderPreviousAddresses(addressesDiv, previousAddresses);
+        let copyTextAddresses = renderPreviousAddresses(addressesDiv, previousAddresses);
 
         // ========================================
         // PAGE 2 - INQUIRIES
@@ -2578,7 +2653,7 @@ function extractInquiries() {
             { title: "TransUnion", items: inquiries.filter(i => i.transunion) }
         ];
 
-        const copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries");
+        let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries");
 
         // ========================================
         // NEW INQUIRIES (today back to 35 days ago)
@@ -2592,7 +2667,7 @@ function extractInquiries() {
             { title: "TransUnion", items: newInquiries.filter(i => i.transunion) }
         ];
 
-        const copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries");
+        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries");
 
         btnNewInquiries.textContent = `NEW (${newInquiries.length})`;
 
@@ -2657,11 +2732,64 @@ function extractInquiries() {
         // WINDOW CONTROLS
         // ========================================
 
+        // Gear menu: update both display and clipboard results without a rescan.
+        const settingsButton = panel.querySelector('#crc-settings-btn');
+        const settingsMenu = panel.querySelector('#crc-settings-menu');
+        const formatSelect = panel.querySelector('#crc-display-mode');
+        formatSelect.value = crcDisplayMode;
+
+        function setSettingsOpen(open) {
+            settingsMenu.hidden = !open;
+            settingsButton.setAttribute('aria-expanded', String(open));
+        }
+        settingsButton.addEventListener('click', () => {
+            setSettingsOpen(settingsMenu.hidden);
+        });
+        formatSelect.addEventListener('change', () => {
+            saveCrcDisplayMode(formatSelect.value);
+
+            addressesDiv.replaceChildren();
+            copyTextAddresses = renderPreviousAddresses(addressesDiv, previousAddresses);
+
+            inquiriesView.replaceChildren();
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries');
+
+            newInquiriesView.replaceChildren();
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries');
+        });
+
+        // Register once so rescanning does not accumulate stale event handlers.
+        if (!window.__crcSettingsDismissHandlerAdded) {
+            window.__crcSettingsDismissHandlerAdded = true;
+            document.addEventListener('pointerdown', event => {
+                const current = document.querySelector('#crc-negative-panel');
+                const menu = current?.querySelector('#crc-settings-menu');
+                const button = current?.querySelector('#crc-settings-btn');
+                if (menu && button && !menu.hidden &&
+                    !menu.contains(event.target) && !button.contains(event.target)) {
+                    menu.hidden = true;
+                    button.setAttribute('aria-expanded', 'false');
+                }
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key !== 'Escape') return;
+                const current = document.querySelector('#crc-negative-panel');
+                const menu = current?.querySelector('#crc-settings-menu');
+                const button = current?.querySelector('#crc-settings-btn');
+                if (menu && button && !menu.hidden) {
+                    menu.hidden = true;
+                    button.setAttribute('aria-expanded', 'false');
+                    button.focus();
+                }
+            });
+        }
+
         panel.querySelector("#crc-close-btn").onclick = function() {
             panel.remove();
         };
 
         panel.querySelector("#crc-minimize-btn").onclick = function() {
+            setSettingsOpen(false);
             panel.classList.toggle("crc-minimized");
             this.textContent = panel.classList.contains("crc-minimized") ? "+" : "−";
         };
