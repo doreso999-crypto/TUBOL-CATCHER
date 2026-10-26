@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.2
+// @version      4.3
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -19,6 +19,7 @@
     const CRC_COPY_CONNECTED_INQUIRIES_KEY = 'tubol-crc-copy-connected-inquiries';
     const CRC_COPY_CONNECTED_NEW_KEY = 'tubol-crc-copy-connected-new-inquiries';
     const CRC_OPEN_NAMES_ONLY_KEY = 'tubol-crc-open-account-names-only';
+    const CRC_INQUIRY_BEFORE_DATE_KEY = 'tubol-crc-inquiry-before-date';
     function loadCrcBoolSetting(key, defaultValue) {
         try {
             const stored = localStorage.getItem(key);
@@ -32,6 +33,12 @@
     let crcCopyConnectedInquiries = loadCrcBoolSetting(CRC_COPY_CONNECTED_INQUIRIES_KEY, false);
     let crcCopyConnectedNew = loadCrcBoolSetting(CRC_COPY_CONNECTED_NEW_KEY, true);
     let crcOpenNamesOnly = loadCrcBoolSetting(CRC_OPEN_NAMES_ONLY_KEY, false);
+    // Blank means all inquiries; YYYY-MM-DD is an exclusive upper bound.
+    let crcInquiryBeforeDate = '';
+    try {
+        const saved = localStorage.getItem(CRC_INQUIRY_BEFORE_DATE_KEY) || '';
+        if (/^\d{4}-\d{2}-\d{2}$/.test(saved)) crcInquiryBeforeDate = saved;
+    } catch (_) { /* Date selection remains available this session. */ }
     function loadCrcDisplayMode() {
         try { return localStorage.getItem(CRC_DISPLAY_KEY) === 'legacy' ? 'legacy' : 'modern'; }
         catch (_) { return 'modern'; }
@@ -198,10 +205,10 @@ const CSS_STYLES = `
     left: 50%;
     transform: translate(-50%,-50%);
     z-index: 70;
-    width: min(740px, calc(100vw - 48px));
-    max-width: calc(100vw - 48px);
-    height: min(74vh, 690px);
-    max-height: calc(100vh - 48px);
+    width: min(1000px, calc(100vw - 32px));
+    max-width: calc(100vw - 32px);
+    height: min(88vh, 860px);
+    max-height: calc(100vh - 24px);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -210,7 +217,7 @@ const CSS_STYLES = `
     color: #e4e6eb;
     border: 1px solid #4a4b4c;
     border-radius: 12px;
-    padding: 16px;
+    padding: clamp(16px, 2.4vw, 28px);
     box-shadow: 0 12px 32px rgba(0,0,0,.5);
 }
 #crc-settings-menu[hidden] { display: none !important; }
@@ -1184,6 +1191,46 @@ Controls padding, font, spacing, and appearance for all 3
 /* =========================================================
    INQUIRIES SUBTABS
    ========================================================= */
+#crc-inquiry-date-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 4px 14px;
+    padding: 12px;
+    background: #232426;
+    border: 1px solid #424446;
+    border-radius: 10px;
+}
+#crc-inquiry-date-filter[hidden] { display: none !important; }
+#crc-inquiry-date-filter label {
+    font-size: 12px;
+    font-weight: 700;
+}
+#crc-inquiry-before-date {
+    color: #e4e6eb;
+    background: #18191a;
+    border: 1px solid #57595d;
+    border-radius: 6px;
+    padding: 7px;
+    min-height: 34px;
+    box-sizing: border-box;
+    color-scheme: dark;
+}
+#crc-inquiry-date-clear {
+    border: 1px solid #666;
+    border-radius: 6px;
+    color: #e4e6eb;
+    background: #3a3b3c;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+#crc-inquiry-date-summary {
+    flex-basis: 100%;
+    font-size: 11px;
+    color: #b0b3b8;
+}
+
 
 .crc-subtabs {
     display: flex;
@@ -1903,9 +1950,29 @@ Controls padding, font, spacing, and appearance for all 3
         }
 
         const d = new Date(year, month - 1, day);
-        if (isNaN(d.getTime())) return null;
+        if (isNaN(d.getTime()) || d.getFullYear() !== year ||
+            d.getMonth() !== month - 1 || d.getDate() !== day) return null;
 
         return d;
+    }
+
+    // Exclusive YYYY-MM-DD cutoff. E.g. 2025-01-01 shows dates
+    // through December 31, 2024, not January 1, 2025.
+    function filterInquiriesBeforeDate(items, beforeDate) {
+        if (!beforeDate) return items || [];
+        const match = String(beforeDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return items || [];
+        const cutoff = new Date(+match[1], +match[2] - 1, +match[3]);
+        if (cutoff.getFullYear() !== +match[1] ||
+            cutoff.getMonth() !== +match[2] - 1 ||
+            cutoff.getDate() !== +match[3]) return items || [];
+        cutoff.setHours(0, 0, 0, 0);
+        return (items || []).filter(item => {
+            const date = parseInquiryDate(item.date);
+            if (!date) return false; // no verified date: do not include in dated results
+            date.setHours(0, 0, 0, 0);
+            return date < cutoff;
+        });
     }
 
     function filterRecentInquiries(inquiryList, days = 35) {
@@ -2293,15 +2360,11 @@ Controls padding, font, spacing, and appearance for all 3
                 if (bureauSet.includes("transunion")) bureauDisplay += "TU - ";
             }
 
-            let collectionWarning = "";
-
-            // For unfamiliar creditors with collection data, classify as
-            // CHARGE OFF but keep a verification note for manual review.
-            if (accountType === 'CHARGE OFF' &&
-                !isKnownCollectionAgency(accountName) &&
-                hasCollectionEvidence(grid.textContent || '')) {
-                collectionWarning = '⚠ VERIFY CHARGE OFF CLASSIFICATION';
-            }
+            // Keep the red verification notice on COLLECTION records only.
+            // CHARGE OFF entries must not display a collection warning.
+            const collectionWarning = accountType === 'COLLECTION'
+                ? '⚠ VERIFY COLLECTION ACCT'
+                : '';
 
             output.push({
                 account: accountName,
@@ -2375,6 +2438,22 @@ Controls padding, font, spacing, and appearance for all 3
     }
 
 
+    // CRC sometimes puts a previous-address date in a separate label or
+    // appends it to the address. Neither layout should lose the date.
+    function parsePreviousAddressEntry(value) {
+        const text = String(value || '').replace(/\s+/g, ' ').trim();
+        if (!text) return { address: '', date: '' };
+
+        const dateOnly = text.match(/^(?:(?:date|reported|updated|as of|from|since)\s*:?\s*)?((?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}(?:-\d{2})?)(?:\s*(?:-|–|—|to|through)\s*(?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}(?:-\d{2})?))?)$/i);
+        if (dateOnly) return { address: '', date: dateOnly[1] };
+
+        const inlineDate = text.match(/^(.+?)[\s,;|]+(?:(?:date|reported|as of)\s*:\s*)?((?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}(?:-\d{2})?)(?:\s*(?:-|–|—|to|through)\s*(?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}(?:-\d{2})?))?)$/i);
+        if (inlineDate && inlineDate[1].trim().length >= 7 && /\d/.test(inlineDate[1])) {
+            return { address: inlineDate[1].trim().replace(/[,;|\-]+\s*$/, ''), date: inlineDate[2] };
+        }
+        return { address: text, date: '' };
+    }
+
     // Read the PREVIOUS ADDRESS row from CRC's three-column report.
     // The address dates are separate labels and must not be treated as addresses.
     // Checked and unchecked items are both report data; selection is not a filter.
@@ -2390,35 +2469,35 @@ Controls padding, font, spacing, and appearance for all 3
             if (columns.length < 4) return;
 
             const heading = (columns[0].textContent || '').replace(/\s+/g, ' ').trim();
-            if (!/^PREVIOUS\s+ADDRESS(?:ES)?\s*:?\s*$/i.test(heading)) return;
+            if (!/^PREVIOUS\s+ADDRESS(?:ES|\(ES\))?\s*:?\s*$/i.test(heading)) return;
 
             bureaus.forEach((bureau, index) => {
                 const column = columns[index + 1];
                 if (!column) return;
-                const labels = column.querySelectorAll('label.MuiFormControlLabel-root');
-                const entries = labels.length ? labels : column.querySelectorAll('p.MuiTypography-body2');
-
+                // Collect adjacent date paragraphs as well as checkbox labels.
+                // A paragraph nested inside a label must not be processed twice.
+                const entries = column.querySelectorAll('label.MuiFormControlLabel-root, p.MuiTypography-body2, p.MuiTypography-body1');
                 let lastAddress = null;
                 entries.forEach(entry => {
+                    if (entry.matches('p.MuiTypography-body2, p.MuiTypography-body1') &&
+                        entry.closest('label.MuiFormControlLabel-root')) return;
                     const textNode = entry.querySelector('.MuiFormControlLabel-label') || entry;
-                    const value = (textNode.textContent || '').replace(/\s+/g, ' ').trim();
-                    if (!value) return;
-
-                    // Address dates are separate labels immediately after the address.
-                    if (/^(?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})$/.test(value)) {
-                        if (lastAddress && !lastAddress.date) lastAddress.date = value;
+                    const parsed = parsePreviousAddressEntry(textNode.textContent || '');
+                    if (parsed.date && !parsed.address) {
+                        if (lastAddress && !lastAddress.date) lastAddress.date = parsed.date;
                         return;
                     }
-                    if (/^\d{4}$/.test(value)) return;
+                    if (!parsed.address || /^\d{4}$/.test(parsed.address)) return;
 
-                    const key = value.toUpperCase();
+                    const key = parsed.address.toUpperCase();
                     const previous = addresses[bureau].find(item => item.address.toUpperCase() === key);
                     if (seen[bureau].has(key)) {
                         lastAddress = previous || null;
+                        if (lastAddress && parsed.date && !lastAddress.date) lastAddress.date = parsed.date;
                         return;
                     }
                     seen[bureau].add(key);
-                    lastAddress = { address: value, date: '' };
+                    lastAddress = { address: parsed.address, date: parsed.date };
                     addresses[bureau].push(lastAddress);
                 });
             });
@@ -2850,7 +2929,7 @@ function extractInquiries() {
                     card.textContent = crcDisplayMode === 'modern'
                         ? '- ' + String(item.address || '').trim().toUpperCase() +
                             (date ? ' ' + date : '') + '(' + suffix + ')'
-                        : item.address;
+                        : item.address + (date ? ' ' + date : '');
                     list.appendChild(card);
                 });
             }
@@ -2861,7 +2940,7 @@ function extractInquiries() {
             if (crcDisplayMode === 'legacy') {
                 copyText += bureau.title.toUpperCase() + ':\n';
                 copyText += items.length
-                    ? items.map(item => '- ' + item.address).join('\n') + '\n\n'
+                    ? items.map(item => '- ' + item.address + (item.date ? ' ' + item.date : '')).join('\n') + '\n\n'
                     : (kind === 'employer' ? '(No employers)\n\n' : '(No previous addresses)\n\n');
             } else {
                 items.forEach(item => {
@@ -3069,6 +3148,30 @@ function extractInquiries() {
 
         inquiriesDiv.appendChild(subtabWrap);
 
+        // Date cutoff applies only to the INQUIRIES subtab. NEW remains
+        // independent and continues showing inquiries from the last 35 days.
+        const dateFilterWrap = document.createElement('div');
+        dateFilterWrap.id = 'crc-inquiry-date-filter';
+        const dateFilterLabel = document.createElement('label');
+        dateFilterLabel.htmlFor = 'crc-inquiry-before-date';
+        dateFilterLabel.textContent = 'Show inquiries BEFORE';
+        const dateFilterInput = document.createElement('input');
+        dateFilterInput.type = 'date';
+        dateFilterInput.id = 'crc-inquiry-before-date';
+        dateFilterInput.value = crcInquiryBeforeDate;
+        dateFilterInput.title = 'Exclusive cutoff: select Jan 1, 2025 to show Dec 2024 and older';
+        const dateFilterClear = document.createElement('button');
+        dateFilterClear.type = 'button';
+        dateFilterClear.id = 'crc-inquiry-date-clear';
+        dateFilterClear.textContent = 'Show all';
+        const dateFilterSummary = document.createElement('div');
+        dateFilterSummary.id = 'crc-inquiry-date-summary';
+        dateFilterWrap.appendChild(dateFilterLabel);
+        dateFilterWrap.appendChild(dateFilterInput);
+        dateFilterWrap.appendChild(dateFilterClear);
+        dateFilterWrap.appendChild(dateFilterSummary);
+        inquiriesDiv.appendChild(dateFilterWrap);
+
         const inquiriesView = document.createElement('div');
         inquiriesView.className = 'crc-inquiries-view';
 
@@ -3090,13 +3193,47 @@ function extractInquiries() {
         // GROUP BY BUREAU
         // ========================================
 
-        const bureauGroups = [
-            { title: "Experian", items: inquiries.filter(i => i.experian) },
-            { title: "Equifax", items: inquiries.filter(i => i.equifax) },
-            { title: "TransUnion", items: inquiries.filter(i => i.transunion) }
+        let regularInquiries = filterInquiriesBeforeDate(inquiries, crcInquiryBeforeDate);
+        let bureauGroups = [
+            { title: "Experian", items: regularInquiries.filter(i => i.experian) },
+            { title: "Equifax", items: regularInquiries.filter(i => i.equifax) },
+            { title: "TransUnion", items: regularInquiries.filter(i => i.transunion) }
         ];
+        function updateDateFilterSummary() {
+            dateFilterSummary.textContent = crcInquiryBeforeDate
+                ? 'Showing ' + regularInquiries.length + ' of ' + inquiries.length +
+                  ' inquiries dated before ' + crcInquiryBeforeDate +
+                  '. Inquiries with missing or invalid dates are excluded.'
+                : 'Showing all ' + inquiries.length + ' inquiries. Set a date to exclude that date and anything newer.';
+        }
+        updateDateFilterSummary();
 
         let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries", crcCopyConnectedInquiries, openInquiryAliasDialog);
+
+        function refreshRegularInquiryDateFilter() {
+            regularInquiries = filterInquiriesBeforeDate(inquiries, crcInquiryBeforeDate);
+            bureauGroups = [
+                { title: "Experian", items: regularInquiries.filter(i => i.experian) },
+                { title: "Equifax", items: regularInquiries.filter(i => i.equifax) },
+                { title: "TransUnion", items: regularInquiries.filter(i => i.transunion) }
+            ];
+            inquiriesView.replaceChildren();
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
+            updateDateFilterSummary();
+        }
+        dateFilterInput.addEventListener('change', () => {
+            crcInquiryBeforeDate = /^\d{4}-\d{2}-\d{2}$/.test(dateFilterInput.value) ? dateFilterInput.value : '';
+            try { localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY, crcInquiryBeforeDate); }
+            catch (_) { /* Filtering works in the current session. */ }
+            refreshRegularInquiryDateFilter();
+        });
+        dateFilterClear.addEventListener('click', () => {
+            dateFilterInput.value = '';
+            crcInquiryBeforeDate = '';
+            try { localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY); }
+            catch (_) { /* Filtering works in the current session. */ }
+            refreshRegularInquiryDateFilter();
+        });
 
         // ========================================
         // NEW INQUIRIES (today back to 35 days ago)
@@ -3346,6 +3483,7 @@ function extractInquiries() {
             inquiriesView.style.display = view === 'inquiries' ? '' : 'none';
             openAccountsView.style.display = view === 'open' ? '' : 'none';
             newInquiriesView.style.display = view === 'new' ? '' : 'none';
+            dateFilterWrap.hidden = view !== 'inquiries';
 
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();

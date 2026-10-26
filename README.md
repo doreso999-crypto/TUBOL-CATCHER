@@ -1,6 +1,6 @@
 # TUBOL-CATCHER
 
-## Negative tab: Collection vs Charge Off (v4.2)
+## Negative tab: Collection vs Charge Off (v4.3)
 
 The scanner classifies a negative account using its creditor name and the
 **account's own table content**. A **CLOSED** status alone is only a fallback.
@@ -19,14 +19,42 @@ The scanner classifies a negative account using its creditor name and the
 
 The matching logic compares complete creditor words rather than interpreting
 a short fragment as a known collection agency. An unfamiliar collection
-classification displays a verification warning, since table descriptions
-should still be checked against the original credit report.
+classification should still be checked against the original credit report.
+The red verification notice is displayed only on accounts classified as
+**COLLECTION**, not on **CHARGE OFF**.
 
 Run `node test-negative-classification.js` for regression coverage.
 
 Takes negative accounts and inquiries from Credit Repair Cloud in one click.
 
-## Creditor alias matching (userscript v4.1)
+## Personal Info: previous address dates (v4.3)
+
+The **PREVIOUS ADDRESSES** extractor recognizes both
+`Previous Addresses:` and `Previous Address(es):` headings. It pairs date
+labels/paragraphs with the preceding address and also accepts dates appearing
+at the end of an address line (e.g., `03/2021` or
+`05/2018 - 06/2019`). Dates appear in the copied address output in both
+Modern and Legacy display modes.
+
+## INQUIRIES date cutoff (v4.3)
+
+The regular **INQUIRIES** subtab has a **Show inquiries BEFORE** date picker.
+Choosing **2025-01-01** shows only December 2024 and older inquiries;
+January 1 itself is excluded. The cutoff filters both the visible list and
+the copied inquiry text. Inquiries without usable dates are excluded while
+a cutoff is active. Use **Show all** to remove it.
+
+This is independent of the **NEW** subtab, which continues showing the last
+35 days. The chosen date is saved locally on the device, like the other
+display preferences.
+
+**Scanner Settings** is now wider/taller but remains viewport bounded
+(maximum 1000px wide, 88vh tall, responsive on smaller screens).
+
+Run `node test-inquiry-date-addresses.js` to check the new date and
+address rules.
+
+## Creditor alias matching (userscript v4.3)
 
 In **INQUIRIES**, a row is green when its creditor matches an **OPEN** account on the **same credit bureau**, using either the same normalized name or a known alias from [creditor-aliases.json](creditor-aliases.json).
 
