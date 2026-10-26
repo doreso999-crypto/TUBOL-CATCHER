@@ -1,0 +1,721 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-10-27",
+  "name": "US credit-report creditor alias starter registry",
+  "complete": false,
+  "description": "Curated, expandable starter dataset. No list can contain every historical, local, truncated or bank/retailer credit-report label. A match only suggests the same creditor/program, not that the specific inquiry was authorized.",
+  "bundling": "This JSON is a reference source. The standalone crc-scanner.js embeds the groups to work without cross-site fetch or network access. Synchronize source and bundled snapshot when editing.",
+  "match_policy": {
+    "same_bureau_only": true,
+    "issuer_only_not_equal_to_retail_program": true,
+    "different_retail_programs_do_not_match": true,
+    "auto_lending_separate_from_card_issuing": true,
+    "avoid_arbitrary_substring_matching": true,
+    "safe_last_token_truncation": true
+  },
+  "sources": {
+    "experian-abbreviations": "https://portal.experianidworks.com/c/common-questions",
+    "wells-fargo-fdic": "https://fdic.gov/system/files/2024-07/wellsfargo-idi-2312.pdf",
+    "capital-one-auto": "https://www.capitalone.com/auto-financing/faq/",
+    "capital-one-kohls": "https://ecm.capitalone.com/WCM/card/credit-card-agreements-q1-2026/credit-card-agreement-for-kohls-credit-card-in-capital-one-n.a.pdf",
+    "credit-karma-paypal": "https://www.creditkarma.com/credit/i/syncb-ppc-why-is-it-on-my-credit-report",
+    "synchrony-amazon": "https://apply.syf.com/cs/groups/public/documents/et_tcdoc/e087452.html",
+    "synchrony-lowes": "https://lowes.syf.com/activate-assets/lowes/common/en/htmls/agreement.html",
+    "citibank-retail": "https://www.citi.com/credit-cards/compare-credit-cards/CMA-PIT",
+    "bread-sec": "https://investor.breadfinancial.com/node/30331/html",
+    "nclc-report": "https://www.nclc.org/wp-content/uploads/2023/09/202309_Report_Digital-Denials.pdf",
+    "smartdispute-sample": "https://www.smartdispute.ai/which-credit-bureau-is-used-most/"
+  },
+  "groups": [
+    {
+      "id": "capital_one",
+      "display_name": "Capital One",
+      "category": "issuer",
+      "aliases": [
+        "CAP1",
+        "CAP ONE",
+        "CAPONE",
+        "CAPITAL ONE",
+        "CAPITALONE",
+        "CAP ONE NA",
+        "CAPITAL ONE NA",
+        "CAP ONE BANK",
+        "CAPITAL ONE BANK",
+        "CAPITAL ONE BANK USA",
+        "CAPITAL ONE BANK USA NA",
+        "CAP ONE CARD",
+        "CAP1 CARD",
+        "COBNA",
+        "CONA"
+      ],
+      "source_ids": [
+        "experian-abbreviations",
+        "smartdispute-sample"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "capital_one_auto",
+      "display_name": "Capital One Auto Finance",
+      "category": "finance",
+      "aliases": [
+        "CAP1AUTO",
+        "CAP1 AUTO",
+        "CAPONEAUTO",
+        "CAPONE AUTO",
+        "CAP ONE AUTO",
+        "CAP ONE AUTO FINANCE",
+        "CAPITAL ONE AUTO",
+        "CAPITAL ONE AUTO FINANCE",
+        "COAF"
+      ],
+      "source_ids": [
+        "capital-one-auto",
+        "smartdispute-sample"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "jpmorgan_chase",
+      "display_name": "JPMorgan Chase",
+      "category": "issuer",
+      "aliases": [
+        "JPMCB",
+        "JPMCB CARD",
+        "CHASE",
+        "CHASE BANK",
+        "CHASE CREDIT CARD",
+        "JP MORGAN CHASE",
+        "JP MORGAN CHASE BANK",
+        "JPMORGAN CHASE",
+        "JPMORGAN CHASE BANK",
+        "JPMORGAN CHASE BANK NA"
+      ],
+      "source_ids": [
+        "experian-abbreviations",
+        "nclc-report"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "chase_auto",
+      "display_name": "Chase Auto",
+      "category": "finance",
+      "aliases": [
+        "CHASE AUTO",
+        "CHASE AUTO FINANCE",
+        "CHASE AUTO FINANCING",
+        "JPMORGAN CHASE AUTO"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "citibank",
+      "display_name": "Citibank",
+      "category": "issuer",
+      "aliases": [
+        "CBNA",
+        "CITI",
+        "CITI CARDS",
+        "CITI CARDS CBNA",
+        "CITICARDS",
+        "CITICARDS CBNA",
+        "CITI BANK",
+        "CITIBANK",
+        "CITIBANK NA",
+        "CITIBANK USA"
+      ],
+      "source_ids": [
+        "experian-abbreviations",
+        "smartdispute-sample"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "wells_fargo",
+      "display_name": "Wells Fargo Bank",
+      "category": "issuer",
+      "aliases": [
+        "WFBNA",
+        "WELLS FARGO",
+        "WELLS FARGO BANK",
+        "WELLS FARGO BANK NA",
+        "WELLS FARGO BANK NATIONAL ASSOCIATION",
+        "WFBNA CARD"
+      ],
+      "source_ids": [
+        "wells-fargo-fdic"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "wells_fargo_auto",
+      "display_name": "Wells Fargo Auto",
+      "category": "finance",
+      "aliases": [
+        "WELLS FARGO AUTO",
+        "WELLS FARGO AUTO LOAN",
+        "WELLS FARGO DEALER SERVICES",
+        "WFBNA AUTO"
+      ],
+      "source_ids": [
+        "wells-fargo-fdic"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "bank_of_america",
+      "display_name": "Bank of America",
+      "category": "issuer",
+      "aliases": [
+        "BANK OF AMERICA",
+        "BANKAMERICA",
+        "BK OF AMER",
+        "BK OF AMERICA",
+        "B OF A",
+        "BOFA",
+        "BANK OF AMER",
+        "BANK OF AMERICA NA"
+      ],
+      "source_ids": [
+        "nclc-report"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "american_express",
+      "display_name": "American Express",
+      "category": "issuer",
+      "aliases": [
+        "AMEX",
+        "AMERICAN EXPRESS",
+        "AMERICAN EXPRESS BANK",
+        "AMERICAN EXPRESS NATIONAL BANK",
+        "AMEX BANK",
+        "AMERICAN EXPRESS CARD"
+      ],
+      "source_ids": [
+        "nclc-report"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "discover",
+      "display_name": "Discover",
+      "category": "issuer",
+      "aliases": [
+        "DISCOVER",
+        "DISCOVER BANK",
+        "DISCOVER FINANCIAL",
+        "DISCOVER FINANCIAL SER",
+        "DISCOVER FINANCIAL SERVICES",
+        "DISCOVER CARD"
+      ],
+      "source_ids": [
+        "nclc-report"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "credit_one",
+      "display_name": "Credit One Bank",
+      "category": "issuer",
+      "aliases": [
+        "CREDIT ONE",
+        "CREDIT ONE BANK",
+        "CREDIT ONE BANK NA",
+        "CREDITONE",
+        "CRDONEBNK",
+        "CREDITONEBNK"
+      ],
+      "source_ids": [
+        "nclc-report"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "synchrony",
+      "display_name": "Synchrony Bank",
+      "category": "issuer",
+      "aliases": [
+        "SYNCB",
+        "SYNCHRONY",
+        "SYNCHRONY BANK",
+        "SYNCHRONY FINANCIAL",
+        "SYF"
+      ],
+      "source_ids": [
+        "synchrony-lowes",
+        "smartdispute-sample"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "comenity_bank",
+      "display_name": "Comenity Bank",
+      "category": "issuer",
+      "aliases": [
+        "COMENITY",
+        "COMENITY BANK",
+        "COMENITYBK",
+        "WORLD FINANCIAL NETWORK BANK",
+        "WFNB"
+      ],
+      "source_ids": [
+        "bread-sec"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "comenity_capital_bank",
+      "display_name": "Comenity Capital Bank",
+      "category": "issuer",
+      "aliases": [
+        "COMENITY CAPITAL BANK",
+        "COMENITYCB",
+        "COMENITY CAP BANK",
+        "WORLD FINANCIAL CAPITAL BANK",
+        "WFCB"
+      ],
+      "source_ids": [
+        "bread-sec"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "barclays",
+      "display_name": "Barclays Bank",
+      "category": "issuer",
+      "aliases": [
+        "BARCLAYS",
+        "BARCLAYS BANK",
+        "BARCLAYS BANK DELAWARE",
+        "BARCLAYS BANK DE",
+        "BARCLAYS US"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "td_bank",
+      "display_name": "TD Bank",
+      "category": "issuer",
+      "aliases": [
+        "TD BANK",
+        "TD BANK USA",
+        "TD BANK USA NA",
+        "TD BANK NA"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "us_bank",
+      "display_name": "U.S. Bank",
+      "category": "issuer",
+      "aliases": [
+        "US BANK",
+        "U S BANK",
+        "USBANK",
+        "US BANK NA",
+        "US BANK NATIONAL ASSOCIATION"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "pnc",
+      "display_name": "PNC Bank",
+      "category": "issuer",
+      "aliases": [
+        "PNC",
+        "PNC BANK",
+        "PNC BANK NA",
+        "PNC BANK NATIONAL ASSOCIATION"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "fnbo",
+      "display_name": "First National Bank of Omaha",
+      "category": "issuer",
+      "aliases": [
+        "FNBO",
+        "FIRST NATIONAL BANK OF OMAHA",
+        "FIRST NATIONAL BANK OMAHA",
+        "FIRST NATL BANK OMAHA"
+      ],
+      "source_ids": [
+        "experian-abbreviations"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "navy_federal",
+      "display_name": "Navy Federal Credit Union",
+      "category": "issuer",
+      "aliases": [
+        "NFCU",
+        "NAVY FEDERAL",
+        "NAVY FEDERAL CREDIT UNION",
+        "NAVY FED CU"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "penfed",
+      "display_name": "Pentagon Federal Credit Union",
+      "category": "issuer",
+      "aliases": [
+        "PENFED",
+        "PEN FED",
+        "PENFED CREDIT UNION",
+        "PENTAGON FEDERAL CREDIT UNION"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "ally_auto",
+      "display_name": "Ally Auto Finance",
+      "category": "finance",
+      "aliases": [
+        "ALLY FINANCIAL",
+        "ALLY FINANCIAL INC",
+        "ALLY AUTO",
+        "ALLY AUTO FINANCE",
+        "ALLY FINANCIAL AUTO"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "santander_consumer",
+      "display_name": "Santander Consumer USA",
+      "category": "issuer",
+      "aliases": [
+        "SANTANDER CONSUMER",
+        "SANTANDER CONSUMER USA",
+        "SANTANDER CONSUMER USA INC",
+        "SANTANDER AUTO",
+        "SCUSA"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "toyota_finance",
+      "display_name": "Toyota Financial Services",
+      "category": "finance",
+      "aliases": [
+        "TOYOTA FINANCIAL",
+        "TOYOTA FINANCIAL SERVICES",
+        "TOYOTA MOTOR CREDIT",
+        "TOYOTA MOTOR CREDIT CORPORATION",
+        "TMCC"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "honda_finance",
+      "display_name": "Honda Financial Services",
+      "category": "finance",
+      "aliases": [
+        "HONDA FINANCE",
+        "HONDA FINANCIAL",
+        "HONDA FINANCIAL SERVICES",
+        "AMERICAN HONDA FINANCE",
+        "AHFC"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "acura_finance",
+      "display_name": "Acura Financial Services",
+      "category": "finance",
+      "aliases": [
+        "ACURA FINANCE",
+        "ACURA FINANCIAL",
+        "ACURA FINANCIAL SERVICES",
+        "ACURA FINANCIAL SERVICES AHFC"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "nissan_finance",
+      "display_name": "Nissan Motor Acceptance",
+      "category": "finance",
+      "aliases": [
+        "NMAC",
+        "NISSAN MOTOR ACCEPTANCE",
+        "NISSAN MOTOR ACCEPTANCE CORPORATION",
+        "NISSAN MOTOR ACCEPTANCE CORP",
+        "NISSAN FINANCIAL SERVICES"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "ford_credit",
+      "display_name": "Ford Motor Credit",
+      "category": "finance",
+      "aliases": [
+        "FORD MOTOR CREDIT",
+        "FORD MOTOR CREDIT COMPANY",
+        "FORD CREDIT",
+        "FMCC",
+        "FORD MOTOR CREDIT CO"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "gm_financial",
+      "display_name": "GM Financial",
+      "category": "issuer",
+      "aliases": [
+        "GM FINANCIAL",
+        "GMF",
+        "GENERAL MOTORS FINANCIAL",
+        "GENERAL MOTORS FINANCIAL COMPANY"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "kia_finance",
+      "display_name": "Kia Finance",
+      "category": "finance",
+      "aliases": [
+        "KIA FINANCE",
+        "KIA MOTORS FINANCE",
+        "KIA FINANCE AMERICA",
+        "KIA MOTOR FINANCE",
+        "KMF"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "hyundai_finance",
+      "display_name": "Hyundai Motor Finance",
+      "category": "finance",
+      "aliases": [
+        "HYUNDAI MOTOR FINANCE",
+        "HYUNDAI CAPITAL AMERICA",
+        "HYUNDAI FINANCE",
+        "HMF"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "carmax_auto_finance",
+      "display_name": "CarMax Auto Finance",
+      "category": "finance",
+      "aliases": [
+        "CARMAX AUTO FINANCE",
+        "CARMAX FINANCE",
+        "CAR MAX AUTO FINANCE"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "bridgecrest",
+      "display_name": "Bridgecrest",
+      "category": "issuer",
+      "aliases": [
+        "BRIDGECREST",
+        "BRIDGECREST CREDIT",
+        "BRIDGECREST FINANCIAL"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "synchrony_amazon_store",
+      "display_name": "Amazon Store Card / Synchrony",
+      "category": "retail_program",
+      "aliases": [
+        "SYNCB/AMAZON",
+        "SYNCB AMAZON",
+        "SYNCB AMAZON PLCC",
+        "SYNCB/AMAZON PLCC",
+        "SYNCHRONY AMAZON STORE CARD",
+        "AMAZON STORE CARD",
+        "AMAZON PRIME STORE CARD"
+      ],
+      "source_ids": [
+        "synchrony-amazon",
+        "smartdispute-sample"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "synchrony_lowes",
+      "display_name": "Lowe's / Synchrony",
+      "category": "retail_program",
+      "aliases": [
+        "SYNCB/LOWES",
+        "SYNCB/LOW",
+        "SYNCB LOWES",
+        "LOWES/SYNCB",
+        "LOWES ADVANTAGE CARD"
+      ],
+      "source_ids": [
+        "synchrony-lowes"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "synchrony_paypal_credit",
+      "display_name": "PayPal Credit / Synchrony",
+      "category": "retail_program",
+      "aliases": [
+        "SYNCB/PPC",
+        "SYNCB PPC",
+        "SYNCB PAYPAL CREDIT",
+        "SYNCHRONY PAYPAL CREDIT",
+        "PAYPAL CREDIT",
+        "BILL ME LATER"
+      ],
+      "source_ids": [
+        "credit-karma-paypal"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "synchrony_carecredit",
+      "display_name": "CareCredit / Synchrony",
+      "category": "retail_program",
+      "aliases": [
+        "SYNCB/CARECREDIT",
+        "SYNCB/CARE CREDIT",
+        "SYNCB/CARECR",
+        "SYNCB CARECREDIT",
+        "CARECREDIT",
+        "CARE CREDIT"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "synchrony_jcpenney",
+      "display_name": "JCPenney / Synchrony",
+      "category": "retail_program",
+      "aliases": [
+        "SYNCB/JCP",
+        "SYNCB JCP",
+        "JCPENNEY/SYNCB",
+        "JC PENNEY CREDIT CARD",
+        "JCPENNEY CARD"
+      ],
+      "source_ids": [],
+      "review_status": "seed_for_review"
+    },
+    {
+      "id": "synchrony_verizon",
+      "display_name": "Verizon Card / Synchrony",
+      "category": "retail_program",
+      "aliases": [
+        "SYNCB/VERIZON",
+        "SYNCB/VERIZO",
+        "SYNCB VERIZON",
+        "VERIZON VISA CARD"
+      ],
+      "source_ids": [
+        "nclc-report"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "capital_one_kohls",
+      "display_name": "Kohl's Card / Capital One",
+      "category": "retail_program",
+      "aliases": [
+        "KOHLS/CAPONE",
+        "KOHLS/CAP1",
+        "KOHLS CAPONE",
+        "KOHL S CAPITAL ONE",
+        "KOHLS CREDIT CARD",
+        "KOHLS REWARDS VISA"
+      ],
+      "source_ids": [
+        "capital-one-kohls",
+        "nclc-report"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "citi_best_buy",
+      "display_name": "Best Buy Card / Citi",
+      "category": "retail_program",
+      "aliases": [
+        "BBY/CBNA",
+        "BEST BUY/CBNA",
+        "BESTBUY/CBNA",
+        "MY BEST BUY CREDIT CARD",
+        "BEST BUY CREDIT CARD"
+      ],
+      "source_ids": [
+        "citibank-retail"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "citi_home_depot",
+      "display_name": "Home Depot Card / Citi",
+      "category": "retail_program",
+      "aliases": [
+        "THD/CBNA",
+        "HOME DEPOT/CBNA",
+        "HOME DEPOT CONSUMER CREDIT CARD",
+        "CITIBANK HOME DEPOT",
+        "HOME DEPOT CREDIT CARD"
+      ],
+      "source_ids": [
+        "citibank-retail"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "citi_macys",
+      "display_name": "Macy's Card / Citi",
+      "category": "retail_program",
+      "aliases": [
+        "MACYS/CBNA",
+        "MACYS CBNA",
+        "MACYS CREDIT CARD",
+        "MACY S CREDIT CARD",
+        "CITIBANK MACYS"
+      ],
+      "source_ids": [
+        "citibank-retail",
+        "nclc-report"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    },
+    {
+      "id": "citi_costco",
+      "display_name": "Costco Anywhere Visa / Citi",
+      "category": "retail_program",
+      "aliases": [
+        "COSTCO/CITI",
+        "COSTCO CBNA",
+        "COSTCO ANYWHERE VISA",
+        "COSTCO ANYWHERE VISA CARD BY CITI"
+      ],
+      "source_ids": [
+        "citibank-retail"
+      ],
+      "review_status": "source_supported_group_with_unverified_variants"
+    }
+  ]
+}
