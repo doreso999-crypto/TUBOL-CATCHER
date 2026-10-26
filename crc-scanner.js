@@ -3403,13 +3403,34 @@ function extractInquiries() {
         copyConnectedNewInput.checked = crcCopyConnectedNew;
         openNamesOnlyInput.checked = crcOpenNamesOnly;
 
+        const settingsBackdrop = panel.querySelector('#crc-settings-backdrop');
+        const settingsGeneral = panel.querySelector('#crc-settings-general');
+        const settingsAliases = panel.querySelector('#crc-settings-aliases');
+        const settingsGeneralTab = panel.querySelector('#crc-settings-tab-general');
+        const settingsAliasesTab = panel.querySelector('#crc-settings-tab-aliases');
+        function selectSettingsTab(which) {
+            const aliases = which === 'aliases';
+            settingsGeneral.hidden = aliases;
+            settingsAliases.hidden = !aliases;
+            settingsGeneralTab.classList.toggle('active', !aliases);
+            settingsAliasesTab.classList.toggle('active', aliases);
+            settingsGeneralTab.setAttribute('aria-selected', String(!aliases));
+            settingsAliasesTab.setAttribute('aria-selected', String(aliases));
+        }
         function setSettingsOpen(open) {
             settingsMenu.hidden = !open;
+            settingsBackdrop.hidden = !open;
             settingsButton.setAttribute('aria-expanded', String(open));
+            if (open) panel.querySelector('#crc-settings-close').focus();
+            else settingsButton.focus();
         }
         settingsButton.addEventListener('click', () => {
             setSettingsOpen(settingsMenu.hidden);
         });
+        settingsGeneralTab.addEventListener('click', () => selectSettingsTab('general'));
+        settingsAliasesTab.addEventListener('click', () => selectSettingsTab('aliases'));
+        panel.querySelector('#crc-settings-close').addEventListener('click', () => setSettingsOpen(false));
+        settingsBackdrop.addEventListener('click', () => setSettingsOpen(false));
         formatSelect.addEventListener('change', () => {
             saveCrcDisplayMode(formatSelect.value);
             panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
@@ -3446,26 +3467,25 @@ function extractInquiries() {
             renderOpenAccounts();
         });
 
-        // Register once so rescanning does not accumulate stale event handlers.
+        // Document-level Escape handler is registered once across rescans.
         if (!window.__crcSettingsDismissHandlerAdded) {
             window.__crcSettingsDismissHandlerAdded = true;
-            document.addEventListener('pointerdown', event => {
-                const current = document.querySelector('#crc-negative-panel');
-                const menu = current?.querySelector('#crc-settings-menu');
-                const button = current?.querySelector('#crc-settings-btn');
-                if (menu && button && !menu.hidden &&
-                    !menu.contains(event.target) && !button.contains(event.target)) {
-                    menu.hidden = true;
-                    button.setAttribute('aria-expanded', 'false');
-                }
-            });
             document.addEventListener('keydown', event => {
                 if (event.key !== 'Escape') return;
                 const current = document.querySelector('#crc-negative-panel');
-                const menu = current?.querySelector('#crc-settings-menu');
-                const button = current?.querySelector('#crc-settings-btn');
-                if (menu && button && !menu.hidden) {
-                    menu.hidden = true;
+                if (!current) return;
+                const aliasOverlay = current.querySelector('#crc-alias-overlay');
+                if (aliasOverlay && !aliasOverlay.hidden) {
+                    aliasOverlay.hidden = true;
+                    return;
+                }
+                const modal = current.querySelector('#crc-settings-menu');
+                if (!modal || modal.hidden) return;
+                modal.hidden = true;
+                const backdrop = current.querySelector('#crc-settings-backdrop');
+                if (backdrop) backdrop.hidden = true;
+                const button = current.querySelector('#crc-settings-btn');
+                if (button) {
                     button.setAttribute('aria-expanded', 'false');
                     button.focus();
                 }
@@ -3473,6 +3493,7 @@ function extractInquiries() {
         }
 
         panel.querySelector("#crc-close-btn").onclick = function() {
+            setSettingsOpen(false);
             panel.remove();
         };
 
