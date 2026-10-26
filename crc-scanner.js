@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      3.8
+// @version      3.9
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -1506,16 +1506,78 @@ Controls padding, font, spacing, and appearance for all 3
     // }
     // ========================================
 
+
+    // Bundled snapshot of creditor-aliases.json. Update both together.
+    // Retail card programs, auto loans and card issuers are separate entries.
+    const CREDITOR_ALIAS_GROUPS = [{"id":"capital_one","aliases":["CAP1","CAP ONE","CAPONE","CAPITAL ONE","CAPITALONE","CAP ONE NA","CAPITAL ONE NA","CAP ONE BANK","CAPITAL ONE BANK","CAPITAL ONE BANK USA","CAPITAL ONE BANK USA NA","CAP ONE CARD","CAP1 CARD","COBNA","CONA"]},{"id":"capital_one_auto","aliases":["CAP1AUTO","CAP1 AUTO","CAPONEAUTO","CAPONE AUTO","CAP ONE AUTO","CAP ONE AUTO FINANCE","CAPITAL ONE AUTO","CAPITAL ONE AUTO FINANCE","COAF"]},{"id":"jpmorgan_chase","aliases":["JPMCB","JPMCB CARD","CHASE","CHASE BANK","CHASE CREDIT CARD","JP MORGAN CHASE","JP MORGAN CHASE BANK","JPMORGAN CHASE","JPMORGAN CHASE BANK","JPMORGAN CHASE BANK NA"]},{"id":"chase_auto","aliases":["CHASE AUTO","CHASE AUTO FINANCE","CHASE AUTO FINANCING","JPMORGAN CHASE AUTO"]},{"id":"citibank","aliases":["CBNA","CITI","CITI CARDS","CITI CARDS CBNA","CITICARDS","CITICARDS CBNA","CITI BANK","CITIBANK","CITIBANK NA","CITIBANK USA"]},{"id":"wells_fargo","aliases":["WFBNA","WELLS FARGO","WELLS FARGO BANK","WELLS FARGO BANK NA","WELLS FARGO BANK NATIONAL ASSOCIATION","WFBNA CARD"]},{"id":"wells_fargo_auto","aliases":["WELLS FARGO AUTO","WELLS FARGO AUTO LOAN","WELLS FARGO DEALER SERVICES","WFBNA AUTO"]},{"id":"bank_of_america","aliases":["BANK OF AMERICA","BANKAMERICA","BK OF AMER","BK OF AMERICA","B OF A","BOFA","BANK OF AMER","BANK OF AMERICA NA"]},{"id":"american_express","aliases":["AMEX","AMERICAN EXPRESS","AMERICAN EXPRESS BANK","AMERICAN EXPRESS NATIONAL BANK","AMEX BANK","AMERICAN EXPRESS CARD"]},{"id":"discover","aliases":["DISCOVER","DISCOVER BANK","DISCOVER FINANCIAL","DISCOVER FINANCIAL SER","DISCOVER FINANCIAL SERVICES","DISCOVER CARD"]},{"id":"credit_one","aliases":["CREDIT ONE","CREDIT ONE BANK","CREDIT ONE BANK NA","CREDITONE","CRDONEBNK","CREDITONEBNK"]},{"id":"synchrony","aliases":["SYNCB","SYNCHRONY","SYNCHRONY BANK","SYNCHRONY FINANCIAL","SYF"]},{"id":"comenity_bank","aliases":["COMENITY","COMENITY BANK","COMENITYBK","WORLD FINANCIAL NETWORK BANK","WFNB"]},{"id":"comenity_capital_bank","aliases":["COMENITY CAPITAL BANK","COMENITYCB","COMENITY CAP BANK","WORLD FINANCIAL CAPITAL BANK","WFCB"]},{"id":"barclays","aliases":["BARCLAYS","BARCLAYS BANK","BARCLAYS BANK DELAWARE","BARCLAYS BANK DE","BARCLAYS US"]},{"id":"td_bank","aliases":["TD BANK","TD BANK USA","TD BANK USA NA","TD BANK NA"]},{"id":"us_bank","aliases":["US BANK","U S BANK","USBANK","US BANK NA","US BANK NATIONAL ASSOCIATION"]},{"id":"pnc","aliases":["PNC","PNC BANK","PNC BANK NA","PNC BANK NATIONAL ASSOCIATION"]},{"id":"fnbo","aliases":["FNBO","FIRST NATIONAL BANK OF OMAHA","FIRST NATIONAL BANK OMAHA","FIRST NATL BANK OMAHA"]},{"id":"navy_federal","aliases":["NFCU","NAVY FEDERAL","NAVY FEDERAL CREDIT UNION","NAVY FED CU"]},{"id":"penfed","aliases":["PENFED","PEN FED","PENFED CREDIT UNION","PENTAGON FEDERAL CREDIT UNION"]},{"id":"ally_auto","aliases":["ALLY FINANCIAL","ALLY FINANCIAL INC","ALLY AUTO","ALLY AUTO FINANCE","ALLY FINANCIAL AUTO"]},{"id":"santander_consumer","aliases":["SANTANDER CONSUMER","SANTANDER CONSUMER USA","SANTANDER CONSUMER USA INC","SANTANDER AUTO","SCUSA"]},{"id":"toyota_finance","aliases":["TOYOTA FINANCIAL","TOYOTA FINANCIAL SERVICES","TOYOTA MOTOR CREDIT","TOYOTA MOTOR CREDIT CORPORATION","TMCC"]},{"id":"honda_finance","aliases":["HONDA FINANCE","HONDA FINANCIAL","HONDA FINANCIAL SERVICES","AMERICAN HONDA FINANCE","AHFC"]},{"id":"acura_finance","aliases":["ACURA FINANCE","ACURA FINANCIAL","ACURA FINANCIAL SERVICES","ACURA FINANCIAL SERVICES AHFC"]},{"id":"nissan_finance","aliases":["NMAC","NISSAN MOTOR ACCEPTANCE","NISSAN MOTOR ACCEPTANCE CORPORATION","NISSAN MOTOR ACCEPTANCE CORP","NISSAN FINANCIAL SERVICES"]},{"id":"ford_credit","aliases":["FORD MOTOR CREDIT","FORD MOTOR CREDIT COMPANY","FORD CREDIT","FMCC","FORD MOTOR CREDIT CO"]},{"id":"gm_financial","aliases":["GM FINANCIAL","GMF","GENERAL MOTORS FINANCIAL","GENERAL MOTORS FINANCIAL COMPANY"]},{"id":"kia_finance","aliases":["KIA FINANCE","KIA MOTORS FINANCE","KIA FINANCE AMERICA","KIA MOTOR FINANCE","KMF"]},{"id":"hyundai_finance","aliases":["HYUNDAI MOTOR FINANCE","HYUNDAI CAPITAL AMERICA","HYUNDAI FINANCE","HMF"]},{"id":"carmax_auto_finance","aliases":["CARMAX AUTO FINANCE","CARMAX FINANCE","CAR MAX AUTO FINANCE"]},{"id":"bridgecrest","aliases":["BRIDGECREST","BRIDGECREST CREDIT","BRIDGECREST FINANCIAL"]},{"id":"synchrony_amazon_store","aliases":["SYNCB/AMAZON","SYNCB AMAZON","SYNCB AMAZON PLCC","SYNCB/AMAZON PLCC","SYNCHRONY AMAZON STORE CARD","AMAZON STORE CARD","AMAZON PRIME STORE CARD"]},{"id":"synchrony_lowes","aliases":["SYNCB/LOWES","SYNCB/LOW","SYNCB LOWES","LOWES/SYNCB","LOWES ADVANTAGE CARD"]},{"id":"synchrony_paypal_credit","aliases":["SYNCB/PPC","SYNCB PPC","SYNCB PAYPAL CREDIT","SYNCHRONY PAYPAL CREDIT","PAYPAL CREDIT","BILL ME LATER"]},{"id":"synchrony_carecredit","aliases":["SYNCB/CARECREDIT","SYNCB/CARE CREDIT","SYNCB/CARECR","SYNCB CARECREDIT","CARECREDIT","CARE CREDIT"]},{"id":"synchrony_jcpenney","aliases":["SYNCB/JCP","SYNCB JCP","JCPENNEY/SYNCB","JC PENNEY CREDIT CARD","JCPENNEY CARD"]},{"id":"synchrony_verizon","aliases":["SYNCB/VERIZON","SYNCB/VERIZO","SYNCB VERIZON","VERIZON VISA CARD"]},{"id":"capital_one_kohls","aliases":["KOHLS/CAPONE","KOHLS/CAP1","KOHLS CAPONE","KOHL S CAPITAL ONE","KOHLS CREDIT CARD","KOHLS REWARDS VISA"]},{"id":"citi_best_buy","aliases":["BBY/CBNA","BEST BUY/CBNA","BESTBUY/CBNA","MY BEST BUY CREDIT CARD","BEST BUY CREDIT CARD"]},{"id":"citi_home_depot","aliases":["THD/CBNA","HOME DEPOT/CBNA","HOME DEPOT CONSUMER CREDIT CARD","CITIBANK HOME DEPOT","HOME DEPOT CREDIT CARD"]},{"id":"citi_macys","aliases":["MACYS/CBNA","MACYS CBNA","MACYS CREDIT CARD","MACY S CREDIT CARD","CITIBANK MACYS"]},{"id":"citi_costco","aliases":["COSTCO/CITI","COSTCO CBNA","COSTCO ANYWHERE VISA","COSTCO ANYWHERE VISA CARD BY CITI"]}];
+    function normalizeCreditorLabel(name) {
+        return String(name || '')
+            .toUpperCase()
+            .replace(/&/g, ' AND ')
+            .replace(/[^A-Z0-9]+/g, ' ')
+            .trim()
+            .split(' ')
+            .filter(Boolean)
+            .join(' ');
+    }
+    function stripCreditorLegalSuffix(name) {
+        let result = name;
+        while (true) {
+            // Only legal suffixes are ignored, not BANK, AUTO or store names.
+            const shorter = result.replace(/ (?:N A|NA|LLC|INC|CORP|CORPORATION|LTD)$/, '');
+            if (!shorter || shorter === result) return result;
+            result = shorter;
+        }
+    }
+    const CREDITOR_ALIAS_INDEX = new Map();
+    CREDITOR_ALIAS_GROUPS.forEach(group => group.aliases.forEach(alias => {
+        const label = stripCreditorLegalSuffix(normalizeCreditorLabel(alias));
+        const previous = CREDITOR_ALIAS_INDEX.get(label);
+        if (previous && previous !== group.id) {
+            throw new Error('Conflicting creditor alias: ' + label);
+        }
+        CREDITOR_ALIAS_INDEX.set(label, group.id);
+    }));
+    function matchCreditorNames(inquiryCreditor, openAccountCreditor) {
+        const inquiryName = stripCreditorLegalSuffix(normalizeCreditorLabel(inquiryCreditor));
+        const accountName = stripCreditorLegalSuffix(normalizeCreditorLabel(openAccountCreditor));
+        if (!inquiryName || !accountName) return false;
+
+        const inquiryGroup = CREDITOR_ALIAS_INDEX.get(inquiryName);
+        const accountGroup = CREDITOR_ALIAS_INDEX.get(accountName);
+        // If either creditor is in the registry, both MUST belong to the
+        // same specific group. A parent bank alone cannot match a store card.
+        if (inquiryGroup || accountGroup) {
+            return Boolean(inquiryGroup && inquiryGroup === accountGroup);
+        }
+
+        // For unmapped creditors, exact normalized names remain valid.
+        if (inquiryName === accountName) {
+            return inquiryName.length >= 5 &&
+                !['BANK','CREDIT','FINANCE','FINANCIAL','AUTO','CARD','LENDER'].includes(inquiryName);
+        }
+
+        // Allow cautious last-word truncation, e.g. ACURA HIGHLA/HIGHLAND.
+        // Do NOT match arbitrary substrings or fuzzy names.
+        const inquiryTokens = inquiryName.split(' ');
+        const accountTokens = accountName.split(' ');
+        if (inquiryTokens.length !== accountTokens.length || inquiryTokens.length < 2) return false;
+        for (let i = 0; i < inquiryTokens.length - 1; i++) {
+            if (inquiryTokens[i] !== accountTokens[i]) return false;
+        }
+        const a = inquiryTokens[inquiryTokens.length - 1];
+        const b = accountTokens[accountTokens.length - 1];
+        const short = a.length <= b.length ? a : b;
+        const long = a.length > b.length ? a : b;
+        return short.length >= 5 &&
+            long.length - short.length <= 4 &&
+            long.startsWith(short);
+    }
+
     function isInquiryConnectedToOpenAccount(creditorName, bureauKey, openAccountsByBureau) {
-        const creditor = normalizeAccountName(creditorName);
-        if (!creditor || !bureauKey) return false;
-
-        const list = openAccountsByBureau[bureauKey] || [];
-
-        return list.some(acc => {
-            const accName = normalizeAccountName(acc.account);
-            return namesMatch(creditor, accName);
-        });
+        if (!creditorName || !bureauKey || !openAccountsByBureau) return false;
+        const sameBureauOpenAccounts = openAccountsByBureau[bureauKey] || [];
+        return sameBureauOpenAccounts.some(acc => matchCreditorNames(creditorName, acc.account));
     }
 
     // ========================================
@@ -2429,7 +2491,7 @@ function extractInquiries() {
                     const inquiry = document.createElement('div');
                     inquiry.className = 'crc-inquiry-row ' +
                         (connected ? 'crc-inq-connected' : 'crc-inq-unconnected');
-                    inquiry.title = connected ? 'Connected to Open Account' : 'Not Connected to Open Account';
+                    inquiry.title = connected ? 'Creditor name or verified alias matches an OPEN account on this bureau; does not establish inquiry authorization' : 'No reliable same-bureau OPEN-account match found';
                     const topRow = document.createElement('div');
                     topRow.className = 'crc-inquiry-top-row';
                     const creditor = document.createElement('div');
@@ -2732,7 +2794,7 @@ function extractInquiries() {
         legendPopover.innerHTML = `
             <div class="crc-legend-row"><b>AD</b>&nbsp;=&nbsp;Already Disputed</div>
             <div class="crc-legend-row"><b>ND</b>&nbsp;=&nbsp;Not Disputed</div>
-            <div class="crc-legend-row"><span class="crc-legend-dot" style="background:#3ab25c"></span>Connected to Open Account</div>
+            <div class="crc-legend-row"><span class="crc-legend-dot" style="background:#3ab25c"></span>Possible same-bureau creditor match (verify inquiry separately)</div>
             <div class="crc-legend-row"><span class="crc-legend-dot" style="background:#e05252"></span>Not Connected to Open Account</div>
         `;
 
