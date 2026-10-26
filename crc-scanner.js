@@ -14,8 +14,24 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    // Persist only list format, never consumer or credit-report data.
+    // Persist presentation/copy preferences only, never consumer or credit-report data.
     const CRC_DISPLAY_KEY = 'tubol-crc-list-display-mode';
+    const CRC_COPY_CONNECTED_INQUIRIES_KEY = 'tubol-crc-copy-connected-inquiries';
+    const CRC_COPY_CONNECTED_NEW_KEY = 'tubol-crc-copy-connected-new-inquiries';
+    const CRC_OPEN_NAMES_ONLY_KEY = 'tubol-crc-open-account-names-only';
+    function loadCrcBoolSetting(key, defaultValue) {
+        try {
+            const stored = localStorage.getItem(key);
+            return stored === null ? defaultValue : stored === 'true';
+        } catch (_) { return defaultValue; }
+    }
+    function saveCrcBoolSetting(key, value) {
+        try { localStorage.setItem(key, String(value)); }
+        catch (_) { /* Keep the current session preference. */ }
+    }
+    let crcCopyConnectedInquiries = loadCrcBoolSetting(CRC_COPY_CONNECTED_INQUIRIES_KEY, false);
+    let crcCopyConnectedNew = loadCrcBoolSetting(CRC_COPY_CONNECTED_NEW_KEY, true);
+    let crcOpenNamesOnly = loadCrcBoolSetting(CRC_OPEN_NAMES_ONLY_KEY, false);
     function loadCrcDisplayMode() {
         try { return localStorage.getItem(CRC_DISPLAY_KEY) === 'legacy' ? 'legacy' : 'modern'; }
         catch (_) { return 'modern'; }
@@ -175,6 +191,8 @@ const CSS_STYLES = `
     left: 12px;
     z-index: 50;
     width: min(350px, calc(100% - 24px));
+    max-height: min(68vh, 480px);
+    overflow-y: auto;
     box-sizing: border-box;
     background: #242526;
     color: #e4e6eb;
@@ -212,6 +230,46 @@ const CSS_STYLES = `
     font-size: 12px;
     line-height: 1.5;
 }
+#crc-settings-menu .crc-settings-section-title {
+    margin: 14px 0 9px;
+    padding-top: 11px;
+    border-top: 1px solid #3a3b3c;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .03em;
+}
+#crc-settings-menu .crc-settings-checkbox {
+    display: flex;
+    align-items: flex-start;
+    gap: 9px;
+    margin-bottom: 12px;
+    cursor: pointer;
+    line-height: 1.4;
+    font-weight: 600;
+}
+#crc-settings-menu .crc-settings-checkbox input {
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    margin: 1px 0 0;
+    accent-color: #2374e1;
+}
+#crc-open-accounts-copy-all {
+    display: block;
+    width: 100%;
+    min-height: 40px;
+    margin: 4px 0 14px;
+    padding: 9px 12px;
+    color: #fff;
+    background: #2374e1;
+    border: 0;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 750;
+    cursor: pointer;
+}
+#crc-open-accounts-copy-all:hover { background: #3982e4; }
+#crc-open-accounts-copy-all:disabled { opacity: .55; cursor: not-allowed; }
 
 /* =========================================================
    WINDOW CONTROLS
@@ -1321,7 +1379,22 @@ Controls padding, font, spacing, and appearance for all 3
                     <option value="modern">Modern — Uppercase + (EXP/EQU/TU)</option>
                     <option value="legacy">Legacy Display — Original grouped lists</option>
                 </select>
-                <div class="crc-settings-note">Applies to visible lists and copied output for Inquiries, New Inquiries and Personal Info. Negative and Open Accounts are unchanged. Preference is saved.</div>
+                <div class="crc-settings-note">List format applies to Inquiries, New Inquiries and Personal Info.</div>
+                <div class="crc-settings-section-title">Inquiry copy settings</div>
+                <label class="crc-settings-checkbox" for="crc-copy-connected-inquiries">
+                    <input type="checkbox" id="crc-copy-connected-inquiries">
+                    <span>Include inquiries connected to open accounts when copying INQUIRIES</span>
+                </label>
+                <label class="crc-settings-checkbox" for="crc-copy-connected-new">
+                    <input type="checkbox" id="crc-copy-connected-new">
+                    <span>Include inquiries connected to open accounts when copying NEW</span>
+                </label>
+                <div class="crc-settings-section-title">Open Accounts</div>
+                <label class="crc-settings-checkbox" for="crc-open-names-only">
+                    <input type="checkbox" id="crc-open-names-only">
+                    <span>Show and copy creditor names only</span>
+                </label>
+                <div class="crc-settings-note">All settings are saved on this device. Open Accounts still includes every extracted account.</div>
             </div>
             <div id="crc-window-controls">
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
@@ -2709,7 +2782,7 @@ function extractInquiries() {
             { title: "TransUnion", items: inquiries.filter(i => i.transunion) }
         ];
 
-        let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries");
+        let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries", crcCopyConnectedInquiries);
 
         // ========================================
         // NEW INQUIRIES (today back to 35 days ago)
@@ -2723,49 +2796,80 @@ function extractInquiries() {
             { title: "TransUnion", items: newInquiries.filter(i => i.transunion) }
         ];
 
-        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", true);
+        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", crcCopyConnectedNew);
 
         btnNewInquiries.textContent = `NEW (${newInquiries.length})`;
 
         // ========================================
-        // OPEN ACCOUNTS VIEW
+        // OPEN ACCOUNTS VIEW + DEDICATED COPY BUTTON
         // ========================================
 
-        if (!openAccounts || openAccounts.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'crc-empty-page';
-            empty.innerHTML = '<div class="crc-page-title">No open accounts</div><div class="crc-page-subtitle">No open accounts found on this report.</div>';
-            openAccountsView.appendChild(empty);
-            copyTextOpenAccounts = '(No open accounts)';
-        } else {
-            openAccounts.forEach(acc => {
+        const openAccountsCopyButton = document.createElement('button');
+        openAccountsCopyButton.id = 'crc-open-accounts-copy-all';
+        openAccountsCopyButton.type = 'button';
+        openAccountsCopyButton.textContent = 'COPY ALL OPEN ACCOUNTS';
+        openAccountsView.appendChild(openAccountsCopyButton);
+
+        function renderOpenAccounts() {
+            // Keep the button when the display preference changes.
+            openAccountsView.replaceChildren(openAccountsCopyButton);
+            const accounts = openAccounts || [];
+            openAccountsCopyButton.disabled = accounts.length === 0;
+
+            if (!accounts.length) {
+                const empty = document.createElement('div');
+                empty.className = 'crc-empty-page';
+                empty.innerHTML = '<div class="crc-page-title">No open accounts</div><div class="crc-page-subtitle">No open accounts found on this report.</div>';
+                openAccountsView.appendChild(empty);
+                copyTextOpenAccounts = '(No open accounts)';
+                return;
+            }
+
+            accounts.forEach(acc => {
                 const card = document.createElement('div');
                 const isNegative = isOpenAccountNegative(acc.account, negativeData);
                 card.className = 'crc-open-account ' + (isNegative ? 'crc-open-negative-card' : 'crc-open-positive-card');
 
-                const h = document.createElement('b'); h.textContent = acc.account;
-                const aNum = document.createElement('div'); aNum.textContent = acc.account_number || '';
-                const bal = document.createElement('div'); bal.textContent = acc.balance || '';
-                const meta = document.createElement('div'); meta.textContent = `${acc.bureau_display || ''} ${acc.account_type || ''}`;
-
+                const h = document.createElement('b');
+                h.textContent = acc.account || '(No creditor)';
                 card.appendChild(h);
-                card.appendChild(aNum);
-                card.appendChild(bal);
-                card.appendChild(meta);
+
+                if (!crcOpenNamesOnly) {
+                    const aNum = document.createElement('div'); aNum.textContent = acc.account_number || '';
+                    const bal = document.createElement('div'); bal.textContent = acc.balance || '';
+                    const meta = document.createElement('div'); meta.textContent = `${acc.bureau_display || ''} ${acc.account_type || ''}`;
+                    card.appendChild(aNum);
+                    card.appendChild(bal);
+                    card.appendChild(meta);
+                }
 
                 openAccountsView.appendChild(card);
-
-                copyTextOpenAccounts += `${acc.account}\n${acc.account_number || ''}\n${acc.balance || ''}\n${acc.bureau_display || ''} ${acc.account_type || ''}\n\n`;
             });
 
-            copyTextOpenAccounts = copyTextOpenAccounts.trim();
+            copyTextOpenAccounts = crcOpenNamesOnly
+                ? accounts.map(acc => String(acc.account || '(No creditor)').trim()).join('\n')
+                : accounts.map(acc => `${acc.account || '(No creditor)'}\n${acc.account_number || ''}\n${acc.balance || ''}\n${acc.bureau_display || ''} ${acc.account_type || ''}`).join('\n\n');
         }
 
+        renderOpenAccounts();
+
         // Subtab switching
+        function updateInquiryCopyNote() {
+            const note = panel.querySelector('#crc-inquiry-copy-note');
+            const isNew = btnNewInquiries.classList.contains('active');
+            const isOpen = btnOpenAccounts.classList.contains('active');
+            const includeConnected = isNew ? crcCopyConnectedNew : crcCopyConnectedInquiries;
+            note.innerHTML = includeConnected
+                ? 'All ' + (isNew ? 'new ' : '') + 'inquiries are copied, including those connected to open accounts.<br>Always double-check the report before disputing.'
+                : 'Only unconnected ' + (isNew ? 'new ' : '') + 'inquiries are copied.<br>Always double-check the report before disputing.';
+            note.classList.toggle('active', !isOpen);
+        }
         function inquiryCopyButtonLabel() {
-            if (btnOpenAccounts.classList.contains('active')) return 'COPY OPEN ACCOUNTS';
-            if (btnNewInquiries.classList.contains('active')) return 'COPY ALL NEW INQUIRIES';
-            return 'COPY UNCONNECTED INQUIRIES';
+            if (btnOpenAccounts.classList.contains('active')) return 'COPY ALL OPEN ACCOUNTS';
+            if (btnNewInquiries.classList.contains('active')) {
+                return crcCopyConnectedNew ? 'COPY ALL NEW INQUIRIES' : 'COPY UNCONNECTED NEW INQUIRIES';
+            }
+            return crcCopyConnectedInquiries ? 'COPY ALL INQUIRIES' : 'COPY UNCONNECTED INQUIRIES';
         }
 
         function setActiveInquirySubtab(view) {
@@ -2777,15 +2881,7 @@ function extractInquiries() {
             openAccountsView.style.display = view === 'open' ? '' : 'none';
             newInquiriesView.style.display = view === 'new' ? '' : 'none';
 
-            // INQUIRIES retains unconnected-only copying; NEW copies every
-            // recent inquiry, including those linked to open accounts.
-            const note = panel.querySelector('#crc-inquiry-copy-note');
-            if (note) {
-                note.innerHTML = view === 'new'
-                    ? 'All new inquiries are copied, including those connected to open accounts.<br>Always double-check the report before disputing.'
-                    : 'Only unconnected inquiries are copied.<br>Always double-check the report before disputing.';
-                note.classList.toggle('active', view === 'inquiries' || view === 'new');
-            }
+            updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
         }
 
@@ -2801,7 +2897,13 @@ function extractInquiries() {
         const settingsButton = panel.querySelector('#crc-settings-btn');
         const settingsMenu = panel.querySelector('#crc-settings-menu');
         const formatSelect = panel.querySelector('#crc-display-mode');
+        const copyConnectedInput = panel.querySelector('#crc-copy-connected-inquiries');
+        const copyConnectedNewInput = panel.querySelector('#crc-copy-connected-new');
+        const openNamesOnlyInput = panel.querySelector('#crc-open-names-only');
         formatSelect.value = crcDisplayMode;
+        copyConnectedInput.checked = crcCopyConnectedInquiries;
+        copyConnectedNewInput.checked = crcCopyConnectedNew;
+        openNamesOnlyInput.checked = crcOpenNamesOnly;
 
         function setSettingsOpen(open) {
             settingsMenu.hidden = !open;
@@ -2819,10 +2921,31 @@ function extractInquiries() {
             copyTextPersonalInfo = renderPersonalInfo(addressesDiv, employersDiv, previousAddresses, employers);
 
             inquiriesView.replaceChildren();
-            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries');
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries);
 
             newInquiriesView.replaceChildren();
-            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', true);
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew);
+        });
+        copyConnectedInput.addEventListener('change', () => {
+            crcCopyConnectedInquiries = copyConnectedInput.checked;
+            saveCrcBoolSetting(CRC_COPY_CONNECTED_INQUIRIES_KEY, crcCopyConnectedInquiries);
+            inquiriesView.replaceChildren();
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries);
+            updateInquiryCopyNote();
+            panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
+        });
+        copyConnectedNewInput.addEventListener('change', () => {
+            crcCopyConnectedNew = copyConnectedNewInput.checked;
+            saveCrcBoolSetting(CRC_COPY_CONNECTED_NEW_KEY, crcCopyConnectedNew);
+            newInquiriesView.replaceChildren();
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew);
+            updateInquiryCopyNote();
+            panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
+        });
+        openNamesOnlyInput.addEventListener('change', () => {
+            crcOpenNamesOnly = openNamesOnlyInput.checked;
+            saveCrcBoolSetting(CRC_OPEN_NAMES_ONLY_KEY, crcOpenNamesOnly);
+            renderOpenAccounts();
         });
 
         // Register once so rescanning does not accumulate stale event handlers.
@@ -2913,26 +3036,35 @@ function extractInquiries() {
         // COPY FUNCTIONS
         // ========================================
 
+        async function copyAccountText(text, button, label) {
+            try {
+                await navigator.clipboard.writeText(text || '');
+                button.textContent = '✓ COPIED';
+            } catch (error) {
+                console.error('Failed to copy account data:', error);
+                button.textContent = 'COPY FAILED';
+            }
+            setTimeout(() => { button.textContent = label(); }, 1500);
+        }
+        openAccountsCopyButton.addEventListener('click', () => {
+            if (!openAccountsCopyButton.disabled) {
+                copyAccountText(copyTextOpenAccounts, openAccountsCopyButton, () => 'COPY ALL OPEN ACCOUNTS');
+            }
+        });
+
         copyButtons[0].onclick = function() {
             navigator.clipboard.writeText(copyTextNegative);
             this.textContent = "✓ COPIED";
             setTimeout(() => { this.textContent = "COPY NEGATIVE ACCOUNTS"; }, 1500);
         };
 
-        copyButtons[1].onclick = async function() {
+        copyButtons[1].onclick = function() {
             const text = btnOpenAccounts.classList.contains('active')
                 ? copyTextOpenAccounts
                 : btnNewInquiries.classList.contains('active')
                     ? copyTextNewInquiries
                     : copyTextOpenInquiries;
-            try {
-                await navigator.clipboard.writeText(text || '');
-                this.textContent = "✓ COPIED";
-            } catch (error) {
-                console.error('Failed to copy inquiry data:', error);
-                this.textContent = "COPY FAILED";
-            }
-            setTimeout(() => { this.textContent = inquiryCopyButtonLabel(); }, 1500);
+            copyAccountText(text, this, inquiryCopyButtonLabel);
         };
 
         copyButtons[2].onclick = function() {
