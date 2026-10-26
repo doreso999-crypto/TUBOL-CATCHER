@@ -2476,10 +2476,10 @@ Controls padding, font, spacing, and appearance for all 3
                 if (!column) return;
                 // Collect adjacent date paragraphs as well as checkbox labels.
                 // A paragraph nested inside a label must not be processed twice.
-                const entries = column.querySelectorAll('label.MuiFormControlLabel-root, p.MuiTypography-body2');
+                const entries = column.querySelectorAll('label.MuiFormControlLabel-root, p.MuiTypography-body2, p.MuiTypography-body1');
                 let lastAddress = null;
                 entries.forEach(entry => {
-                    if (entry.matches('p.MuiTypography-body2') &&
+                    if (entry.matches('p.MuiTypography-body2, p.MuiTypography-body1') &&
                         entry.closest('label.MuiFormControlLabel-root')) return;
                     const textNode = entry.querySelector('.MuiFormControlLabel-label') || entry;
                     const parsed = parsePreviousAddressEntry(textNode.textContent || '');
