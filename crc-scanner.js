@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.0
+// @version      4.1
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -1571,6 +1571,7 @@ Controls padding, font, spacing, and appearance for all 3
     const CREDITOR_BASE_INDEX = new Map();
     const CREDITOR_DISABLED = new Set();
     const CREDITOR_CUSTOM = new Map();
+    const CREDITOR_USER_GROUPS = [];
 
     function creditorAliasKey(value) {
         return normalizeCreditorLabel(value);
@@ -1582,6 +1583,21 @@ Controls padding, font, spacing, and appearance for all 3
             if (!json) return;
             const stored = JSON.parse(json);
             if (stored.version !== 1) return;
+            // Preserve compatibility with v4.0 saved aliases. Custom groups
+            // were added in v4.1, within the existing version-1 schema.
+            (Array.isArray(stored.groups) ? stored.groups : []).slice(0, 200).forEach(item => {
+                if (!item || typeof item.id !== 'string' || typeof item.name !== 'string') return;
+                const name = item.name.trim();
+                const id = item.id;
+                const key = creditorAliasKey(name);
+                if (!/^user-[a-z0-9-]+$/.test(id) || name.length < 2 || name.length > 100 || !key) return;
+                if (CREDITOR_DISPLAY_NAMES[id] ||
+                    Object.values(CREDITOR_DISPLAY_NAMES).some(other => creditorAliasKey(other) === key)) return;
+                const group = { id, aliases: [name] };
+                CREDITOR_USER_GROUPS.push(group);
+                CREDITOR_ALIAS_GROUPS.push(group);
+                CREDITOR_DISPLAY_NAMES[id] = name;
+            });
             (Array.isArray(stored.disabled) ? stored.disabled : []).slice(0, 1000).forEach(value => {
                 if (typeof value === 'string' && value.length <= 100 && creditorAliasKey(value)) {
                     CREDITOR_DISABLED.add(creditorAliasKey(value));
@@ -1645,16 +1661,24 @@ Controls padding, font, spacing, and appearance for all 3
     function commitCreditorOverrideChange(callback) {
         const disabledSnapshot = [...CREDITOR_DISABLED];
         const customSnapshot = [...CREDITOR_CUSTOM];
+        const userGroupSnapshot = [...CREDITOR_USER_GROUPS];
         callback();
         try {
             localStorage.setItem(CRC_ALIAS_KEY, JSON.stringify({
-                version: 1, disabled: [...CREDITOR_DISABLED], custom: [...CREDITOR_CUSTOM.values()]
+                version: 1, disabled: [...CREDITOR_DISABLED], custom: [...CREDITOR_CUSTOM.values()],
+                groups: CREDITOR_USER_GROUPS.map(group => ({ id: group.id, name: CREDITOR_DISPLAY_NAMES[group.id] }))
             }));
         } catch (_) {
             CREDITOR_DISABLED.clear();
             disabledSnapshot.forEach(key => CREDITOR_DISABLED.add(key));
             CREDITOR_CUSTOM.clear();
             customSnapshot.forEach(([key, value]) => CREDITOR_CUSTOM.set(key, value));
+            CREDITOR_ALIAS_GROUPS.splice(CREDITOR_ALIAS_GROUPS.length - CREDITOR_USER_GROUPS.length, CREDITOR_USER_GROUPS.length);
+            CREDITOR_USER_GROUPS.forEach(group => { delete CREDITOR_DISPLAY_NAMES[group.id]; });
+            CREDITOR_USER_GROUPS.splice(0, CREDITOR_USER_GROUPS.length, ...userGroupSnapshot);
+            CREDITOR_ALIAS_GROUPS.push(...userGroupSnapshot);
+            userGroupSnapshot.forEach(group => { CREDITOR_DISPLAY_NAMES[group.id] = group.aliases[0]; });
+            rebuildCreditorIndex();
             return { ok: false, message: 'Could not save creditor aliases in browser storage.' };
         }
         rebuildCreditorIndex();
@@ -1699,8 +1723,55 @@ Controls padding, font, spacing, and appearance for all 3
             if (baseAlias) CREDITOR_DISABLED.add(key);
         });
     }
+    function createCreditorGroup(displayName, observedVariation = '') {
+        const name = String(displayName || '').trim();
+        const key = creditorAliasKey(name);
+        const observed = String(observedVariation || '').trim();
+        const observedKey = creditorAliasKey(observed);
+        if (name.length < 2 || name.length > 100 || !key)
+            return { ok: false, message: 'Creditor name must be 2–100 characters.' };
+        if (CREDITOR_USER_GROUPS.length >= 200)
+            return { ok: false, message: 'Custom creditor limit reached.' };
+        const duplicateName = resolveCreditorGroup(name);
+        if (duplicateName || Object.values(CREDITOR_DISPLAY_NAMES).some(label => creditorAliasKey(label) === key))
+            return { ok: false, message: 'This creditor already exists. Select the existing creditor.' };
+        if (observed && (observed.length < 2 || observed.length > 100 || !observedKey))
+            return { ok: false, message: 'Variation must be 2–100 characters.' };
+        const observedGroup = observed ? resolveCreditorGroup(observed) : null;
+        if (observedGroup)
+            return { ok: false, message: 'The selected variation already belongs to ' + CREDITOR_DISPLAY_NAMES[observedGroup] + '.' };
+        const slug = key.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        let id = 'user-' + slug, count = 2;
+        while (CREDITOR_DISPLAY_NAMES[id]) id = 'user-' + slug + '-' + count++;
+        const result = commitCreditorOverrideChange(() => {
+            const group = { id, aliases: [name] };
+            CREDITOR_USER_GROUPS.push(group);
+            CREDITOR_ALIAS_GROUPS.push(group);
+            CREDITOR_DISPLAY_NAMES[id] = name;
+            if (observed && observedKey !== key) CREDITOR_CUSTOM.set(observedKey, { alias: observed, groupId: id });
+        });
+        return { ...result, groupId: result.ok ? id : null };
+    }
+    function deleteUserCreditorGroup(groupId) {
+        const index = CREDITOR_USER_GROUPS.findIndex(group => group.id === groupId);
+        if (index < 0) return { ok: false, message: 'Built-in creditors cannot be deleted.' };
+        return commitCreditorOverrideChange(() => {
+            CREDITOR_CUSTOM.forEach((value, key) => { if (value.groupId === groupId) CREDITOR_CUSTOM.delete(key); });
+            CREDITOR_DISABLED.delete(creditorAliasKey(CREDITOR_DISPLAY_NAMES[groupId]));
+            const group = CREDITOR_USER_GROUPS[index];
+            CREDITOR_USER_GROUPS.splice(index, 1);
+            CREDITOR_ALIAS_GROUPS.splice(CREDITOR_ALIAS_GROUPS.indexOf(group), 1);
+            delete CREDITOR_DISPLAY_NAMES[groupId];
+        });
+    }
     function resetCreditorAliases() {
-        return commitCreditorOverrideChange(() => { CREDITOR_DISABLED.clear(); CREDITOR_CUSTOM.clear(); });
+        return commitCreditorOverrideChange(() => {
+            CREDITOR_DISABLED.clear();
+            CREDITOR_CUSTOM.clear();
+            CREDITOR_ALIAS_GROUPS.splice(CREDITOR_ALIAS_GROUPS.length - CREDITOR_USER_GROUPS.length, CREDITOR_USER_GROUPS.length);
+            CREDITOR_USER_GROUPS.forEach(group => { delete CREDITOR_DISPLAY_NAMES[group.id]; });
+            CREDITOR_USER_GROUPS.length = 0;
+        });
     }
     loadCreditorOverrides();
     rebuildCreditorIndex();
