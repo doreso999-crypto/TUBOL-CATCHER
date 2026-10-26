@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      3.9
+// @version      4.0
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    // Persist presentation/copy preferences only, never consumer or credit-report data.
+    // Save preferences and only creditor names users explicitly add to the alias dictionary; never save report details.
     const CRC_DISPLAY_KEY = 'tubol-crc-list-display-mode';
     const CRC_COPY_CONNECTED_INQUIRIES_KEY = 'tubol-crc-copy-connected-inquiries';
     const CRC_COPY_CONNECTED_NEW_KEY = 'tubol-crc-copy-connected-new-inquiries';
@@ -254,6 +254,23 @@ const CSS_STYLES = `
     margin: 1px 0 0;
     accent-color: #2374e1;
 }
+
+#crc-alias-search, #crc-alias-target { width: 100%; box-sizing: border-box; background: #18191a; color: #e4e6eb; padding: 9px; border: 1px solid #55585b; border-radius: 8px; margin: 8px 0; }
+#crc-alias-list { max-height: 250px; overflow-y: auto; background: #18191a; padding: 5px; border: 1px solid #44484b; border-radius: 8px; }
+.crc-alias-entity { margin-bottom: 5px; border: 1px solid #353638; border-radius: 6px; }
+.crc-alias-entity summary { cursor: pointer; font-size: 12px; font-weight: 700; padding: 8px; }
+.crc-alias-variation { cursor: context-menu; font-size: 12px; padding: 6px 10px; border-top: 1px solid #353638; overflow-wrap: anywhere; }
+.crc-alias-variation:hover { background: #3a3b3c; }
+.crc-alias-custom { color: #95caff; }
+#crc-alias-reset { border-radius: 7px; padding: 8px; cursor: pointer; color: #ddd; background: transparent; border: 1px solid #55585b; margin-top: 8px; }
+.crc-alias-overlay[hidden] { display: none !important; }
+.crc-alias-overlay { position: absolute; inset: 0; z-index: 100; padding: 15px; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; }
+.crc-alias-card { background: #242526; border: 1px solid #53575a; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
+.crc-alias-card h3 { margin: 0 0 8px; }
+#crc-alias-name { font-size: 13px; margin: 8px 0; overflow-wrap: anywhere; }
+.crc-alias-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
+.crc-alias-actions button { cursor: pointer; color: #fff; background: #3a3b3c; border: 0; padding: 9px 12px; border-radius: 7px; }
+.crc-alias-actions .crc-alias-primary { background: #2374e1; }
 #crc-open-accounts-copy-all {
     display: block;
     width: 100%;
@@ -1395,6 +1412,11 @@ Controls padding, font, spacing, and appearance for all 3
                     <span>Show and copy creditor names only</span>
                 </label>
                 <div class="crc-settings-note">All settings are saved on this device. Open Accounts still includes every extracted account.</div>
+                <div class="crc-settings-section-title">Creditor Name Variations</div>
+                <div class="crc-settings-note">Expand any creditor to see its names. Right-click a variation to remove it. Right-click an INQUIRIES or NEW inquiry to add its name to a creditor.</div>
+                <input type="search" id="crc-alias-search" placeholder="Search creditor names" aria-label="Search creditor names">
+                <div id="crc-alias-list" aria-label="Creditor alias manager"></div>
+                <button type="button" id="crc-alias-reset">Restore default aliases</button>
             </div>
             <div id="crc-window-controls">
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
@@ -1402,6 +1424,19 @@ Controls padding, font, spacing, and appearance for all 3
             </div>
         </div>
 
+        <div class="crc-alias-overlay" id="crc-alias-overlay" role="dialog" aria-modal="true" aria-label="Assign inquiry creditor" hidden>
+            <div class="crc-alias-card">
+                <h3>Add inquiry variation</h3>
+                <div id="crc-alias-name"></div>
+                <label for="crc-alias-target">Assign to creditor</label>
+                <select id="crc-alias-target"></select>
+                <div id="crc-alias-feedback" class="crc-settings-note">Select the correct creditor. This alias will apply across reports in this browser.</div>
+                <div class="crc-alias-actions">
+                    <button type="button" id="crc-alias-cancel">Cancel</button>
+                    <button type="button" id="crc-alias-save" class="crc-alias-primary">Add alias</button>
+                </div>
+            </div>
+        </div>
         <!-- HEADER DIVIDER -->
         <div id="crc-header-divider"></div>
 
@@ -1529,22 +1564,153 @@ Controls padding, font, spacing, and appearance for all 3
             result = shorter;
         }
     }
+
+    const CREDITOR_DISPLAY_NAMES = {"capital_one":"Capital One","capital_one_auto":"Capital One Auto Finance","jpmorgan_chase":"JPMorgan Chase","chase_auto":"Chase Auto","citibank":"Citibank","wells_fargo":"Wells Fargo Bank","wells_fargo_auto":"Wells Fargo Auto","bank_of_america":"Bank of America","american_express":"American Express","discover":"Discover","credit_one":"Credit One Bank","synchrony":"Synchrony Bank","comenity_bank":"Comenity Bank","comenity_capital_bank":"Comenity Capital Bank","barclays":"Barclays Bank","td_bank":"TD Bank","us_bank":"U.S. Bank","pnc":"PNC Bank","fnbo":"First National Bank of Omaha","navy_federal":"Navy Federal Credit Union","penfed":"Pentagon Federal Credit Union","ally_auto":"Ally Auto Finance","santander_consumer":"Santander Consumer USA","toyota_finance":"Toyota Financial Services","honda_finance":"Honda Financial Services","acura_finance":"Acura Financial Services","nissan_finance":"Nissan Motor Acceptance","ford_credit":"Ford Motor Credit","gm_financial":"GM Financial","kia_finance":"Kia Finance","hyundai_finance":"Hyundai Motor Finance","carmax_auto_finance":"CarMax Auto Finance","bridgecrest":"Bridgecrest","synchrony_amazon_store":"Amazon Store Card / Synchrony","synchrony_lowes":"Lowe's / Synchrony","synchrony_paypal_credit":"PayPal Credit / Synchrony","synchrony_carecredit":"CareCredit / Synchrony","synchrony_jcpenney":"JCPenney / Synchrony","synchrony_verizon":"Verizon Card / Synchrony","capital_one_kohls":"Kohl's Card / Capital One","citi_best_buy":"Best Buy Card / Citi","citi_home_depot":"Home Depot Card / Citi","citi_macys":"Macy's Card / Citi","citi_costco":"Costco Anywhere Visa / Citi"};
+    const CRC_ALIAS_KEY = 'tubol-crc-alias-overrides-v1';
     const CREDITOR_ALIAS_INDEX = new Map();
-    CREDITOR_ALIAS_GROUPS.forEach(group => group.aliases.forEach(alias => {
-        const label = stripCreditorLegalSuffix(normalizeCreditorLabel(alias));
-        const previous = CREDITOR_ALIAS_INDEX.get(label);
-        if (previous && previous !== group.id) {
-            throw new Error('Conflicting creditor alias: ' + label);
+    const CREDITOR_BASE_INDEX = new Map();
+    const CREDITOR_DISABLED = new Set();
+    const CREDITOR_CUSTOM = new Map();
+
+    function creditorAliasKey(value) {
+        return normalizeCreditorLabel(value);
+    }
+    function loadCreditorOverrides() {
+        if (typeof localStorage === 'undefined') return;
+        try {
+            const json = localStorage.getItem(CRC_ALIAS_KEY);
+            if (!json) return;
+            const stored = JSON.parse(json);
+            if (stored.version !== 1) return;
+            (Array.isArray(stored.disabled) ? stored.disabled : []).slice(0, 1000).forEach(value => {
+                if (typeof value === 'string' && value.length <= 100 && creditorAliasKey(value)) {
+                    CREDITOR_DISABLED.add(creditorAliasKey(value));
+                }
+            });
+            (Array.isArray(stored.custom) ? stored.custom : []).slice(0, 500).forEach(item => {
+                if (!item || typeof item.alias !== 'string' || !CREDITOR_DISPLAY_NAMES[item.groupId]) return;
+                const alias = item.alias.trim();
+                const key = creditorAliasKey(alias);
+                if (alias.length >= 2 && alias.length <= 100 && key) {
+                    CREDITOR_CUSTOM.set(key, { alias, groupId: item.groupId });
+                }
+            });
+        } catch (err) {
+            console.warn('Unable to load saved creditor alias settings', err);
         }
-        CREDITOR_ALIAS_INDEX.set(label, group.id);
-    }));
+    }
+    function rebuildCreditorIndex() {
+        CREDITOR_ALIAS_INDEX.clear();
+        CREDITOR_BASE_INDEX.clear();
+        CREDITOR_ALIAS_GROUPS.forEach(group => group.aliases.forEach(value => {
+            const raw = creditorAliasKey(value);
+            const simplified = stripCreditorLegalSuffix(raw);
+            if (!CREDITOR_BASE_INDEX.has(raw)) CREDITOR_BASE_INDEX.set(raw, group.id);
+            if (!CREDITOR_BASE_INDEX.has(simplified)) CREDITOR_BASE_INDEX.set(simplified, group.id);
+            if (CREDITOR_DISABLED.has(raw)) return;
+            if (!CREDITOR_ALIAS_INDEX.has(raw)) CREDITOR_ALIAS_INDEX.set(raw, group.id);
+            if (!CREDITOR_ALIAS_INDEX.has(simplified)) CREDITOR_ALIAS_INDEX.set(simplified, group.id);
+        }));
+        CREDITOR_CUSTOM.forEach((entry, key) => {
+            // A user reassignment after disabling the original alias wins.
+            if (!CREDITOR_ALIAS_INDEX.has(key) || CREDITOR_DISABLED.has(key)) CREDITOR_ALIAS_INDEX.set(key, entry.groupId);
+        });
+    }
+    function resolveCreditorGroup(value) {
+        const raw = creditorAliasKey(value);
+        if (!raw) return null;
+        if (CREDITOR_CUSTOM.has(raw)) return CREDITOR_CUSTOM.get(raw).groupId;
+        if (CREDITOR_DISABLED.has(raw)) return null;
+        return CREDITOR_ALIAS_INDEX.get(raw) ||
+            CREDITOR_ALIAS_INDEX.get(stripCreditorLegalSuffix(raw)) || null;
+    }
+    function listCreditorAliases(groupId) {
+        const group = CREDITOR_ALIAS_GROUPS.find(item => item.id === groupId);
+        if (!group) return [];
+        const entries = [];
+        group.aliases.forEach(alias => {
+            const key = creditorAliasKey(alias);
+            if (CREDITOR_DISABLED.has(key)) return;
+            const override = CREDITOR_CUSTOM.get(key);
+            if (override && override.groupId !== groupId) return;
+            entries.push({ alias, custom: false });
+        });
+        CREDITOR_CUSTOM.forEach((entry, key) => {
+            if (entry.groupId === groupId && !entries.some(item => creditorAliasKey(item.alias) === key)) {
+                entries.push({ alias: entry.alias, custom: true });
+            }
+        });
+        return entries.sort((a,b) => a.alias.localeCompare(b.alias));
+    }
+    function commitCreditorOverrideChange(callback) {
+        const disabledSnapshot = [...CREDITOR_DISABLED];
+        const customSnapshot = [...CREDITOR_CUSTOM];
+        callback();
+        try {
+            localStorage.setItem(CRC_ALIAS_KEY, JSON.stringify({
+                version: 1, disabled: [...CREDITOR_DISABLED], custom: [...CREDITOR_CUSTOM.values()]
+            }));
+        } catch (_) {
+            CREDITOR_DISABLED.clear();
+            disabledSnapshot.forEach(key => CREDITOR_DISABLED.add(key));
+            CREDITOR_CUSTOM.clear();
+            customSnapshot.forEach(([key, value]) => CREDITOR_CUSTOM.set(key, value));
+            return { ok: false, message: 'Could not save creditor aliases in browser storage.' };
+        }
+        rebuildCreditorIndex();
+        return { ok: true, message: 'Creditor aliases updated.' };
+    }
+    function addCreditorAlias(value, groupId) {
+        const alias = String(value || '').trim();
+        const key = creditorAliasKey(alias);
+        if (!CREDITOR_DISPLAY_NAMES[groupId]) return { ok:false, message:'Select a creditor.' };
+        if (!key || alias.length < 2 || alias.length > 100) return { ok:false, message:'Alias must be 2–100 characters.' };
+        const already = resolveCreditorGroup(alias);
+        if (already === groupId) return { ok:true, unchanged:true, message:'This variation already belongs to the selected creditor.' };
+        if (already && already !== groupId) {
+            return { ok:false, message:'Already assigned to ' + CREDITOR_DISPLAY_NAMES[already] + '. Remove it from that creditor first.' };
+        }
+        return commitCreditorOverrideChange(() => {
+            const previousGroup = CREDITOR_BASE_INDEX.get(key);
+            if (previousGroup && previousGroup !== groupId) {
+                // Keep the old built-in definition disabled while overriding it.
+                CREDITOR_DISABLED.add(key);
+                CREDITOR_CUSTOM.set(key, { alias, groupId });
+            } else {
+                CREDITOR_DISABLED.delete(key);
+                if (previousGroup === groupId) CREDITOR_CUSTOM.delete(key);
+                else CREDITOR_CUSTOM.set(key, { alias, groupId });
+            }
+        });
+    }
+    function deleteCreditorAlias(value, groupId) {
+        const key = creditorAliasKey(value);
+        if (!CREDITOR_DISPLAY_NAMES[groupId]) return { ok:false, message:'Unknown creditor.' };
+        if (key === creditorAliasKey(CREDITOR_DISPLAY_NAMES[groupId])) {
+            return { ok:false, message:'The main creditor name must remain available.' };
+        }
+        if (!listCreditorAliases(groupId).some(x => creditorAliasKey(x.alias) === key)) {
+            return { ok:false, message:'This variation is not active for that creditor.' };
+        }
+        const baseAlias = CREDITOR_ALIAS_GROUPS.some(group => group.id === groupId &&
+            group.aliases.some(alias => creditorAliasKey(alias) === key));
+        return commitCreditorOverrideChange(() => {
+            CREDITOR_CUSTOM.delete(key);
+            if (baseAlias) CREDITOR_DISABLED.add(key);
+        });
+    }
+    function resetCreditorAliases() {
+        return commitCreditorOverrideChange(() => { CREDITOR_DISABLED.clear(); CREDITOR_CUSTOM.clear(); });
+    }
+    loadCreditorOverrides();
+    rebuildCreditorIndex();
     function matchCreditorNames(inquiryCreditor, openAccountCreditor) {
         const inquiryName = stripCreditorLegalSuffix(normalizeCreditorLabel(inquiryCreditor));
         const accountName = stripCreditorLegalSuffix(normalizeCreditorLabel(openAccountCreditor));
         if (!inquiryName || !accountName) return false;
 
-        const inquiryGroup = CREDITOR_ALIAS_INDEX.get(inquiryName);
-        const accountGroup = CREDITOR_ALIAS_INDEX.get(accountName);
+        const inquiryGroup = resolveCreditorGroup(inquiryCreditor);
+        const accountGroup = resolveCreditorGroup(openAccountCreditor);
         // If either creditor is in the registry, both MUST belong to the
         // same specific group. A parent bank alone cannot match a store card.
         if (inquiryGroup || accountGroup) {
@@ -2454,7 +2620,7 @@ function extractInquiries() {
     // items by default; NEW includes connected recent inquiries.
     // ========================================
 
-    function renderInquiryBureauGroups(container, groups, emptyLabel, includeConnectedInCopy = false) {
+    function renderInquiryBureauGroups(container, groups, emptyLabel, includeConnectedInCopy = false, onContext = null) {
         let copyText = '';
 
         groups.forEach(group => {
@@ -2491,7 +2657,11 @@ function extractInquiries() {
                     const inquiry = document.createElement('div');
                     inquiry.className = 'crc-inquiry-row ' +
                         (connected ? 'crc-inq-connected' : 'crc-inq-unconnected');
-                    inquiry.title = connected ? 'Creditor name or verified alias matches an OPEN account on this bureau; does not establish inquiry authorization' : 'No reliable same-bureau OPEN-account match found';
+                    inquiry.title = (connected ? 'Possible same-bureau creditor match' : 'No reliable same-bureau OPEN match') + ' · Right-click to assign a creditor alias';
+                    if (onContext) inquiry.addEventListener('contextmenu', event => {
+                        event.preventDefault();
+                        onContext(item);
+                    });
                     const topRow = document.createElement('div');
                     topRow.className = 'crc-inquiry-top-row';
                     const creditor = document.createElement('div');
@@ -2844,7 +3014,7 @@ function extractInquiries() {
             { title: "TransUnion", items: inquiries.filter(i => i.transunion) }
         ];
 
-        let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries", crcCopyConnectedInquiries);
+        let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries", crcCopyConnectedInquiries, openInquiryAliasDialog);
 
         // ========================================
         // NEW INQUIRIES (today back to 35 days ago)
@@ -2858,7 +3028,7 @@ function extractInquiries() {
             { title: "TransUnion", items: newInquiries.filter(i => i.transunion) }
         ];
 
-        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", crcCopyConnectedNew);
+        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", crcCopyConnectedNew, openInquiryAliasDialog);
 
         btnNewInquiries.textContent = `NEW (${newInquiries.length})`;
 
@@ -2914,6 +3084,114 @@ function extractInquiries() {
         }
 
         renderOpenAccounts();
+
+
+        // Recompute badges and both clipboard variants without rescanning.
+        function updateInquiryAliasHighlights() {
+            inquiries.forEach(item => {
+                item.connectedToOpen = isInquiryConnectedToOpenAccount(item.creditor, item.bureauKey, openAccountsByBureau);
+            });
+            inquiriesView.replaceChildren();
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
+            newInquiriesView.replaceChildren();
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog);
+            updateInquiryCopyNote();
+            panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
+        }
+
+        const aliasList = panel.querySelector('#crc-alias-list');
+        const aliasSearch = panel.querySelector('#crc-alias-search');
+        const aliasDialog = panel.querySelector('#crc-alias-overlay');
+        const aliasTarget = panel.querySelector('#crc-alias-target');
+        const aliasFeedback = panel.querySelector('#crc-alias-feedback');
+        const aliasGroupsSorted = [...CREDITOR_ALIAS_GROUPS].sort((a,b) =>
+            CREDITOR_DISPLAY_NAMES[a.id].localeCompare(CREDITOR_DISPLAY_NAMES[b.id]));
+        let selectedInquiryAlias = '';
+
+        function renderAliasSettings() {
+            const query = normalizeCreditorLabel(aliasSearch.value);
+            const expanded = new Set([...aliasList.querySelectorAll('details[open]')].map(el => el.dataset.group));
+            aliasList.replaceChildren();
+            aliasGroupsSorted.forEach(group => {
+                const displayName = CREDITOR_DISPLAY_NAMES[group.id];
+                const variants = listCreditorAliases(group.id);
+                if (query && !normalizeCreditorLabel(displayName).includes(query) &&
+                    !variants.some(v => normalizeCreditorLabel(v.alias).includes(query))) return;
+                const details = document.createElement('details');
+                details.className = 'crc-alias-entity';
+                details.dataset.group = group.id;
+                details.open = Boolean(query) || expanded.has(group.id);
+                const title = document.createElement('summary');
+                title.textContent = displayName + ' (' + variants.length + ')';
+                details.appendChild(title);
+                variants.forEach(variant => {
+                    const row = document.createElement('div');
+                    row.className = 'crc-alias-variation' + (variant.custom ? ' crc-alias-custom' : '');
+                    row.textContent = variant.alias + (variant.custom ? ' · custom' : '');
+                    row.title = 'Right-click to delete this variation';
+                    row.addEventListener('contextmenu', event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        if (!window.confirm('Remove "' + variant.alias + '" from ' + displayName + '?')) return;
+                        const outcome = deleteCreditorAlias(variant.alias, group.id);
+                        if (!outcome.ok) window.alert(outcome.message);
+                        else { renderAliasSettings(); updateInquiryAliasHighlights(); }
+                    });
+                    details.appendChild(row);
+                });
+                aliasList.appendChild(details);
+            });
+            if (!aliasList.children.length) {
+                const none = document.createElement('div');
+                none.className = 'crc-settings-note';
+                none.textContent = 'No creditors match this search.';
+                aliasList.appendChild(none);
+            }
+        }
+        aliasSearch.addEventListener('input', renderAliasSettings);
+        panel.querySelector('#crc-alias-reset').addEventListener('click', () => {
+            if (!window.confirm('Remove all custom aliases and restore the original list?')) return;
+            const result = resetCreditorAliases();
+            if (!result.ok) window.alert(result.message);
+            else { renderAliasSettings(); updateInquiryAliasHighlights(); }
+        });
+        function closeInquiryAliasDialog() {
+            aliasDialog.hidden = true;
+            selectedInquiryAlias = '';
+        }
+        function openInquiryAliasDialog(item) {
+            selectedInquiryAlias = String(item?.creditor || '').trim();
+            if (!selectedInquiryAlias) return;
+            aliasTarget.replaceChildren();
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = 'Select a creditor...';
+            aliasTarget.appendChild(placeholder);
+            aliasGroupsSorted.forEach(group => {
+                const option = document.createElement('option');
+                option.value = group.id;
+                option.textContent = CREDITOR_DISPLAY_NAMES[group.id];
+                aliasTarget.appendChild(option);
+            });
+            aliasTarget.value = resolveCreditorGroup(selectedInquiryAlias) || '';
+            panel.querySelector('#crc-alias-name').textContent = 'Inquiry: ' + selectedInquiryAlias;
+            aliasFeedback.textContent = 'Select the correct creditor. Saved aliases affect matching in all reports on this browser.';
+            aliasDialog.hidden = false;
+            aliasTarget.focus();
+        }
+        panel.querySelector('#crc-alias-cancel').addEventListener('click', closeInquiryAliasDialog);
+        panel.querySelector('#crc-alias-save').addEventListener('click', () => {
+            const result = addCreditorAlias(selectedInquiryAlias, aliasTarget.value);
+            aliasFeedback.textContent = result.message;
+            if (!result.ok) return;
+            renderAliasSettings();
+            updateInquiryAliasHighlights();
+            closeInquiryAliasDialog();
+        });
+        aliasDialog.addEventListener('click', e => {
+            if (e.target === aliasDialog) closeInquiryAliasDialog();
+        });
+        renderAliasSettings();
 
         // Subtab switching
         function updateInquiryCopyNote() {
@@ -2983,16 +3261,16 @@ function extractInquiries() {
             copyTextPersonalInfo = renderPersonalInfo(addressesDiv, employersDiv, previousAddresses, employers);
 
             inquiriesView.replaceChildren();
-            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries);
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
 
             newInquiriesView.replaceChildren();
-            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew);
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog);
         });
         copyConnectedInput.addEventListener('change', () => {
             crcCopyConnectedInquiries = copyConnectedInput.checked;
             saveCrcBoolSetting(CRC_COPY_CONNECTED_INQUIRIES_KEY, crcCopyConnectedInquiries);
             inquiriesView.replaceChildren();
-            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries);
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
         });
@@ -3000,7 +3278,7 @@ function extractInquiries() {
             crcCopyConnectedNew = copyConnectedNewInput.checked;
             saveCrcBoolSetting(CRC_COPY_CONNECTED_NEW_KEY, crcCopyConnectedNew);
             newInquiriesView.replaceChildren();
-            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew);
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog);
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
         });
