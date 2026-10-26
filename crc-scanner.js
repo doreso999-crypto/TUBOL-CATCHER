@@ -1611,12 +1611,15 @@ Controls padding, font, spacing, and appearance for all 3
             if (!CREDITOR_ALIAS_INDEX.has(simplified)) CREDITOR_ALIAS_INDEX.set(simplified, group.id);
         }));
         CREDITOR_CUSTOM.forEach((entry, key) => {
-            if (!CREDITOR_ALIAS_INDEX.has(key)) CREDITOR_ALIAS_INDEX.set(key, entry.groupId);
+            // A user reassignment after disabling the original alias wins.
+            if (!CREDITOR_ALIAS_INDEX.has(key) || CREDITOR_DISABLED.has(key)) CREDITOR_ALIAS_INDEX.set(key, entry.groupId);
         });
     }
     function resolveCreditorGroup(value) {
         const raw = creditorAliasKey(value);
-        if (!raw || CREDITOR_DISABLED.has(raw)) return null;
+        if (!raw) return null;
+        if (CREDITOR_CUSTOM.has(raw)) return CREDITOR_CUSTOM.get(raw).groupId;
+        if (CREDITOR_DISABLED.has(raw)) return null;
         return CREDITOR_ALIAS_INDEX.get(raw) ||
             CREDITOR_ALIAS_INDEX.get(stripCreditorLegalSuffix(raw)) || null;
     }
@@ -1667,9 +1670,16 @@ Controls padding, font, spacing, and appearance for all 3
             return { ok:false, message:'Already assigned to ' + CREDITOR_DISPLAY_NAMES[already] + '. Remove it from that creditor first.' };
         }
         return commitCreditorOverrideChange(() => {
-            CREDITOR_DISABLED.delete(key);
-            if (CREDITOR_BASE_INDEX.get(key) === groupId) CREDITOR_CUSTOM.delete(key);
-            else CREDITOR_CUSTOM.set(key, { alias, groupId });
+            const previousGroup = CREDITOR_BASE_INDEX.get(key);
+            if (previousGroup && previousGroup !== groupId) {
+                // Keep the old built-in definition disabled while overriding it.
+                CREDITOR_DISABLED.add(key);
+                CREDITOR_CUSTOM.set(key, { alias, groupId });
+            } else {
+                CREDITOR_DISABLED.delete(key);
+                if (previousGroup === groupId) CREDITOR_CUSTOM.delete(key);
+                else CREDITOR_CUSTOM.set(key, { alias, groupId });
+            }
         });
     }
     function deleteCreditorAlias(value, groupId) {
