@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      3.4
+// @version      3.5
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -1933,16 +1933,28 @@ if (
                 const labels = column.querySelectorAll('label.MuiFormControlLabel-root');
                 const entries = labels.length ? labels : column.querySelectorAll('p.MuiTypography-body2');
 
+                let lastAddress = null;
                 entries.forEach(entry => {
                     const textNode = entry.querySelector('.MuiFormControlLabel-label') || entry;
-                    const address = (textNode.textContent || '').replace(/\s+/g, ' ').trim();
-                    // Dates in CRC occupy their own checkbox row (MM/YYYY, YYYY, etc.).
-                    if (!address || /^(?:\d{1,2}\/\d{4}|\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})$/.test(address)) return;
+                    const value = (textNode.textContent || '').replace(/\s+/g, ' ').trim();
+                    if (!value) return;
 
-                    const key = address.toUpperCase();
-                    if (seen[bureau].has(key)) return;
+                    // Address dates are separate labels immediately after the address.
+                    if (/^(?:\d{1,2}\/\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})$/.test(value)) {
+                        if (lastAddress && !lastAddress.date) lastAddress.date = value;
+                        return;
+                    }
+                    if (/^\d{4}$/.test(value)) return;
+
+                    const key = value.toUpperCase();
+                    const previous = addresses[bureau].find(item => item.address.toUpperCase() === key);
+                    if (seen[bureau].has(key)) {
+                        lastAddress = previous || null;
+                        return;
+                    }
                     seen[bureau].add(key);
-                    addresses[bureau].push(address);
+                    lastAddress = { address: value, date: '' };
+                    addresses[bureau].push(lastAddress);
                 });
             });
         });
@@ -2281,16 +2293,14 @@ function extractInquiries() {
             section.appendChild(itemsWrap);
             container.appendChild(section);
 
-            // Copy text only includes UNCONNECTED inquiries.
-            copyText += `${group.title.toUpperCase()}:\n\n`;
-            if (unconnectedInGroup.length === 0) {
-                copyText += `(No unconnected inquiries)\n\n`;
-            } else {
-                unconnectedInGroup.forEach(item => {
-                    copyText += `- ${(item.creditor || "(No creditor)").toLowerCase()} ${item.date || ""}\n`;
-                });
-                copyText += `\n`;
-            }
+            // Copy unconnected inquiries as uppercase lines with compact bureau suffixes.
+            const code = group.title === 'Experian' ? 'EXP'
+                : group.title === 'Equifax' ? 'EQU' : 'TU';
+            unconnectedInGroup.forEach(item => {
+                const creditor = String(item.creditor || '(No creditor)').trim().toUpperCase();
+                const date = String(item.date || '').trim();
+                copyText += `- ${creditor}${date ? ' ' + date : ''}(${code})\n`;
+            });
         });
 
         return copyText.trim();
@@ -2346,7 +2356,7 @@ function extractInquiries() {
                 items.forEach(address => {
                     const card = document.createElement('div');
                     card.className = 'crc-previous-address-card';
-                    card.textContent = address;
+                    card.textContent = address.address;
                     list.appendChild(card);
                 });
             }
@@ -2354,10 +2364,12 @@ function extractInquiries() {
             section.appendChild(list);
             container.appendChild(section);
 
-            copyText += bureau.title.toUpperCase() + ':\n';
-            copyText += items.length
-                ? items.map(address => '- ' + address).join('\n') + '\n\n'
-                : '(No previous addresses)\n\n';
+            const suffix = bureau.code === 'EX' ? 'EXP' : bureau.code;
+            items.forEach(item => {
+                const address = String(item.address || '').trim().toUpperCase();
+                const date = String(item.date || '').trim();
+                copyText += `- ${address}${date ? ' ' + date : ''}(${suffix})\n`;
+            });
         });
         return copyText.trim();
     }
