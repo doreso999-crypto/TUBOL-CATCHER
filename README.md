@@ -1,5 +1,29 @@
 # TUBOL-CATCHER
 
+## Negative tab: Collection vs Charge Off (v4.2)
+
+The scanner classifies a negative account using its creditor name and the
+**account's own table content**. A **CLOSED** status alone is only a fallback.
+
+- When collection evidence appears in the account table and the creditor name
+  matches an entry in the built-in `COLLECTION_AGENCIES` list, classify as
+  **COLLECTION**.
+- When collection evidence appears in the account table but the creditor name
+  is **not** in that list, classify as **CHARGE OFF** — even when the account
+  status also says **Closed**.
+- A closed account **without** collection or charge-off evidence remains
+  **CLOSED LP**. Explicit charge-off wording also takes precedence over Closed.
+- Bankruptcy classifications retain higher priority than these rules.
+  Repossession, foreclosure and other status fallbacks remain available when
+  no higher-priority indicator applies.
+
+The matching logic compares complete creditor words rather than interpreting
+a short fragment as a known collection agency. An unfamiliar collection
+classification displays a verification warning, since table descriptions
+should still be checked against the original credit report.
+
+Run `node test-negative-classification.js` for regression coverage.
+
 Takes negative accounts and inquiries from Credit Repair Cloud in one click.
 
 ## Creditor alias matching (userscript v4.1)
