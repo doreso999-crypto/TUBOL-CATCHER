@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      3.6
+// @version      3.7
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -1042,7 +1042,9 @@ Controls padding, font, spacing, and appearance for all 3
     font-weight: 700;
 }
 
-/* Bureau-grouped previous addresses */
+/* Bureau-grouped personal information */
+.crc-personal-heading { padding: 14px 16px 0; margin: 0; font-size: 13px; font-weight: 800; color: #e4e6eb; }
+.crc-personal-section { margin-bottom: 16px; }
 #crc-page-tabs .crc-page-btn {
     padding-left: 5px;
     padding-right: 5px;
@@ -1053,6 +1055,7 @@ Controls padding, font, spacing, and appearance for all 3
     display: none;
 }
 
+#crc-employers,
 #crc-previous-addresses {
     width: 100%;
     box-sizing: border-box;
@@ -1318,7 +1321,7 @@ Controls padding, font, spacing, and appearance for all 3
                     <option value="modern">Modern — Uppercase + (EXP/EQU/TU)</option>
                     <option value="legacy">Legacy Display — Original grouped lists</option>
                 </select>
-                <div class="crc-settings-note">Applies to visible lists and copied output for Inquiries, New Inquiries and Previous Addresses. Negative and Open Accounts are unchanged. Preference is saved.</div>
+                <div class="crc-settings-note">Applies to visible lists and copied output for Inquiries, New Inquiries and Personal Info. Negative and Open Accounts are unchanged. Preference is saved.</div>
             </div>
             <div id="crc-window-controls">
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
@@ -1353,7 +1356,7 @@ Controls padding, font, spacing, and appearance for all 3
         <div id="crc-page-tabs">
             <button id="crc-page-1-btn" class="crc-page-btn active">NEGATIVE</button>
             <button id="crc-page-2-btn" class="crc-page-btn">INQUIRIES</button>
-            <button id="crc-page-3-btn" class="crc-page-btn" type="button">PREVIOUS ADDRESS</button>
+            <button id="crc-page-3-btn" class="crc-page-btn" type="button">PERSONAL INFO</button>
         </div>
 
         <!-- PAGE CONTENT -->
@@ -1367,7 +1370,8 @@ Controls padding, font, spacing, and appearance for all 3
     <div id="crc-inquiry-copy-note">Only unconnected inquiries are copied.<br>Always double-check the report before disputing.</div>
 </div>
         <div id="crc-page-3" class="crc-page">
-            <div id="crc-previous-addresses"></div>
+            <div class="crc-personal-section"><h3 class="crc-personal-heading">PREVIOUS ADDRESSES</h3><div id="crc-previous-addresses"></div></div>
+            <div class="crc-personal-section"><h3 class="crc-personal-heading">EMPLOYERS</h3><div id="crc-employers"></div></div>
         </div>
         </div>
 
@@ -1375,7 +1379,7 @@ Controls padding, font, spacing, and appearance for all 3
         <div id="crc-copy-wrapper">
             <button id="crc-copy-page-1" class="crc-page-copy active">COPY NEGATIVE ACCOUNTS</button>
             <button id="crc-copy-page-2" class="crc-page-copy">COPY UNCONNECTED INQUIRIES</button>
-            <button id="crc-copy-page-3" class="crc-page-copy" type="button">COPY PREVIOUS ADDRESSES</button>
+            <button id="crc-copy-page-3" class="crc-page-copy" type="button">COPY PERSONAL INFO</button>
         </div>
     `;
 
@@ -2039,6 +2043,29 @@ if (
         return addresses;
     }
 
+
+    function extractEmployers() {
+        const employers = { EX: [], EQU: [], TU: [] };
+        document.querySelectorAll('.MuiGrid-container.MuiGrid-grid-xs-12').forEach(row => {
+            const cols = Array.from(row.children).filter(cell =>
+                cell.classList && cell.classList.contains('MuiGrid-item')
+            );
+            if (cols.length < 4 || !/^EMPLOYERS?\s*:?\s*$/i.test((cols[0].textContent || '').trim())) return;
+            ['EX', 'EQU', 'TU'].forEach((bureau, index) => {
+                const labels = cols[index + 1].querySelectorAll('label.MuiFormControlLabel-root');
+                const entries = labels.length ? labels : cols[index + 1].querySelectorAll('p.MuiTypography-body2');
+                entries.forEach(entry => {
+                    const node = entry.querySelector('.MuiFormControlLabel-label') || entry;
+                    const name = (node.textContent || '').replace(/\s+/g, ' ').trim();
+                    if (!name || /^(?:\d{1,2}\/\d{4}|\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})$/.test(name)) return;
+                    if (employers[bureau].some(item => item.address.toUpperCase() === name.toUpperCase())) return;
+                    employers[bureau].push({ address: name, date: '' });
+                });
+            });
+        });
+        return employers;
+    }
+
 function extractInquiries() {
     let inquiries = [];
 
@@ -2384,7 +2411,7 @@ function extractInquiries() {
     }
 
     // Use the same collapsible, bureau-grouped presentation as inquiries.
-    function renderPreviousAddresses(container, addresses) {
+    function renderPreviousAddresses(container, addresses, kind = 'address') {
         let copyText = '';
         [
             { code: 'EX', title: 'Experian' },
@@ -2425,7 +2452,7 @@ function extractInquiries() {
             if (!items.length) {
                 const empty = document.createElement('div');
                 empty.className = 'crc-inquiry-none';
-                empty.textContent = 'No previous addresses';
+                empty.textContent = kind === 'employer' ? 'No employers' : 'No previous addresses';
                 list.appendChild(empty);
             } else {
                 items.forEach(item => {
@@ -2447,7 +2474,7 @@ function extractInquiries() {
                 copyText += bureau.title.toUpperCase() + ':\n';
                 copyText += items.length
                     ? items.map(item => '- ' + item.address).join('\n') + '\n\n'
-                    : '(No previous addresses)\n\n';
+                    : (kind === 'employer' ? '(No employers)\n\n' : '(No previous addresses)\n\n');
             } else {
                 items.forEach(item => {
                     const address = String(item.address || '').trim().toUpperCase();
@@ -2459,6 +2486,21 @@ function extractInquiries() {
         return copyText.trim();
     }
 
+
+    function renderPersonalInfo(addressDiv, employerDiv, addresses, employers) {
+        const addressText = renderPreviousAddresses(addressDiv, addresses);
+        const hasEmployers = Object.values(employers).some(items => items.length > 0);
+        if (!hasEmployers) {
+            const empty = document.createElement('div');
+            empty.className = 'crc-inquiry-none';
+            empty.textContent = 'No employers listed in this report.';
+            employerDiv.appendChild(empty);
+            return addressText;
+        }
+        const employerText = renderPreviousAddresses(employerDiv, employers, 'employer');
+        return [addressText, 'EMPLOYERS:\n' + employerText].filter(Boolean).join('\n\n');
+    }
+
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
         let openAccountsData = extractOpenAccounts();
@@ -2466,6 +2508,7 @@ function extractInquiries() {
         let openAccountsByBureau = openAccountsData.byBureau;
         let inquiries = extractInquiries();
         let previousAddresses = extractPreviousAddresses();
+        let employers = extractEmployers();
 
         // ========================================
         // CONNECT INQUIRIES TO OPEN ACCOUNTS
@@ -2564,7 +2607,8 @@ function extractInquiries() {
         // ========================================
 
         const addressesDiv = panel.querySelector('#crc-previous-addresses');
-        let copyTextAddresses = renderPreviousAddresses(addressesDiv, previousAddresses);
+        const employersDiv = panel.querySelector('#crc-employers');
+        let copyTextPersonalInfo = renderPersonalInfo(addressesDiv, employersDiv, previousAddresses, employers);
 
         // ========================================
         // PAGE 2 - INQUIRIES
@@ -2761,7 +2805,8 @@ function extractInquiries() {
             panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
 
             addressesDiv.replaceChildren();
-            copyTextAddresses = renderPreviousAddresses(addressesDiv, previousAddresses);
+            employersDiv.replaceChildren();
+            copyTextPersonalInfo = renderPersonalInfo(addressesDiv, employersDiv, previousAddresses, employers);
 
             inquiriesView.replaceChildren();
             copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries');
@@ -2885,9 +2930,9 @@ function extractInquiries() {
         };
 
         copyButtons[2].onclick = function() {
-            navigator.clipboard.writeText(copyTextAddresses);
+            navigator.clipboard.writeText(copyTextPersonalInfo);
             this.textContent = "✓ COPIED";
-            setTimeout(() => { this.textContent = "COPY PREVIOUS ADDRESSES"; }, 1500);
+            setTimeout(() => { this.textContent = "COPY PERSONAL INFO"; }, 1500);
         };
     }
 
