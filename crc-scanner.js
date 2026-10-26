@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      3.3
-// @description  Extract negative accounts + open accounts + inquiries from CRC
+// @version      3.4
+// @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
 // ==/UserScript==
@@ -972,6 +972,37 @@ Controls padding, font, spacing, and appearance for all 3
     font-size: 15px;
     font-weight: 700;
 }
+
+/* Bureau-grouped previous addresses */
+#crc-page-tabs .crc-page-btn {
+    padding-left: 5px;
+    padding-right: 5px;
+    font-size: 12px;
+}
+
+#crc-page-3 {
+    display: none;
+}
+
+#crc-previous-addresses {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 16px 20px;
+    background: #18191a;
+}
+
+.crc-previous-address-card {
+    padding: 11px 12px;
+    margin-bottom: 7px;
+    border: 1px solid #3a3b3c;
+    border-radius: 8px;
+    background: #242526;
+    color: #e4e6eb;
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
+}
+
 /* =========================================================
    INQUIRIES PAGE
    ========================================================= */
@@ -1244,6 +1275,7 @@ Controls padding, font, spacing, and appearance for all 3
         <div id="crc-page-tabs">
             <button id="crc-page-1-btn" class="crc-page-btn active">NEGATIVE</button>
             <button id="crc-page-2-btn" class="crc-page-btn">INQUIRIES</button>
+            <button id="crc-page-3-btn" class="crc-page-btn" type="button">PREVIOUS ADDRESS</button>
         </div>
 
         <!-- PAGE CONTENT -->
@@ -1256,12 +1288,16 @@ Controls padding, font, spacing, and appearance for all 3
     <div id="crc-inquiries"></div>
     <div id="crc-inquiry-copy-note">Only unconnected inquiries are copied.<br>Always double-check the report before disputing.</div>
 </div>
+        <div id="crc-page-3" class="crc-page">
+            <div id="crc-previous-addresses"></div>
+        </div>
         </div>
 
         <!-- COPY BUTTONS (STICKY FOOTER) -->
         <div id="crc-copy-wrapper">
             <button id="crc-copy-page-1" class="crc-page-copy active">COPY NEGATIVE ACCOUNTS</button>
             <button id="crc-copy-page-2" class="crc-page-copy">COPY UNCONNECTED INQUIRIES</button>
+            <button id="crc-copy-page-3" class="crc-page-copy" type="button">COPY PREVIOUS ADDRESSES</button>
         </div>
     `;
 
@@ -1873,6 +1909,46 @@ if (
         return results;
     }
 
+
+    // Read the PREVIOUS ADDRESS row from CRC's three-column report.
+    // The address dates are separate labels and must not be treated as addresses.
+    // Checked and unchecked items are both report data; selection is not a filter.
+    function extractPreviousAddresses() {
+        const addresses = { EX: [], EQU: [], TU: [] };
+        const seen = { EX: new Set(), EQU: new Set(), TU: new Set() };
+        const bureaus = ['EX', 'EQU', 'TU'];
+
+        document.querySelectorAll('.MuiGrid-container.MuiGrid-grid-xs-12').forEach(row => {
+            const columns = Array.from(row.children).filter(child =>
+                child.classList && child.classList.contains('MuiGrid-item')
+            );
+            if (columns.length < 4) return;
+
+            const heading = (columns[0].textContent || '').replace(/\s+/g, ' ').trim();
+            if (!/^PREVIOUS\s+ADDRESS(?:ES)?\s*:?\s*$/i.test(heading)) return;
+
+            bureaus.forEach((bureau, index) => {
+                const column = columns[index + 1];
+                if (!column) return;
+                const labels = column.querySelectorAll('label.MuiFormControlLabel-root');
+                const entries = labels.length ? labels : column.querySelectorAll('p.MuiTypography-body2');
+
+                entries.forEach(entry => {
+                    const textNode = entry.querySelector('.MuiFormControlLabel-label') || entry;
+                    const address = (textNode.textContent || '').replace(/\s+/g, ' ').trim();
+                    // Dates in CRC occupy their own checkbox row (MM/YYYY, YYYY, etc.).
+                    if (!address || /^(?:\d{1,2}\/\d{4}|\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4})$/.test(address)) return;
+
+                    const key = address.toUpperCase();
+                    if (seen[bureau].has(key)) return;
+                    seen[bureau].add(key);
+                    addresses[bureau].push(address);
+                });
+            });
+        });
+        return addresses;
+    }
+
 function extractInquiries() {
     let inquiries = [];
 
@@ -2220,12 +2296,79 @@ function extractInquiries() {
         return copyText.trim();
     }
 
+
+    // Use the same collapsible, bureau-grouped presentation as inquiries.
+    function renderPreviousAddresses(container, addresses) {
+        let copyText = '';
+        [
+            { code: 'EX', title: 'Experian' },
+            { code: 'EQU', title: 'Equifax' },
+            { code: 'TU', title: 'TransUnion' }
+        ].forEach(bureau => {
+            const items = addresses[bureau.code] || [];
+            const section = document.createElement('div');
+            section.className = 'crc-inquiry-section';
+
+            const header = document.createElement('div');
+            header.className = 'crc-inquiry-bureau';
+            header.setAttribute('role', 'button');
+            header.setAttribute('tabindex', '0');
+            header.setAttribute('aria-expanded', 'true');
+
+            const title = document.createElement('span');
+            title.textContent = bureau.title + ' (' + items.length + ')';
+            const arrow = document.createElement('span');
+            arrow.className = 'crc-inquiry-bureau-arrow';
+            arrow.textContent = '▾';
+            header.appendChild(title);
+            header.appendChild(arrow);
+
+            const toggle = () => {
+                const collapsed = section.classList.toggle('crc-collapsed');
+                header.setAttribute('aria-expanded', String(!collapsed));
+            };
+            header.addEventListener('click', toggle);
+            header.addEventListener('keydown', event => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    toggle();
+                }
+            });
+
+            const list = document.createElement('div');
+            list.className = 'crc-inquiry-items';
+            if (items.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'crc-inquiry-none';
+                empty.textContent = 'No previous addresses';
+                list.appendChild(empty);
+            } else {
+                items.forEach(address => {
+                    const card = document.createElement('div');
+                    card.className = 'crc-previous-address-card';
+                    card.textContent = address;
+                    list.appendChild(card);
+                });
+            }
+            section.appendChild(header);
+            section.appendChild(list);
+            container.appendChild(section);
+
+            copyText += bureau.title.toUpperCase() + ':\n';
+            copyText += items.length
+                ? items.map(address => '- ' + address).join('\n') + '\n\n'
+                : '(No previous addresses)\n\n';
+        });
+        return copyText.trim();
+    }
+
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
         let openAccountsData = extractOpenAccounts();
         let openAccounts = openAccountsData.list;
         let openAccountsByBureau = openAccountsData.byBureau;
         let inquiries = extractInquiries();
+        let previousAddresses = extractPreviousAddresses();
 
         // ========================================
         // CONNECT INQUIRIES TO OPEN ACCOUNTS
@@ -2317,6 +2460,13 @@ function extractInquiries() {
         });
 
         results.appendChild(resultsFrag);
+
+        // ========================================
+        // PAGE 3 - PREVIOUS ADDRESSES
+        // ========================================
+
+        const addressesDiv = panel.querySelector('#crc-previous-addresses');
+        const copyTextAddresses = renderPreviousAddresses(addressesDiv, previousAddresses);
 
         // ========================================
         // PAGE 2 - INQUIRIES
@@ -2510,16 +2660,19 @@ function extractInquiries() {
 
         const pages = [
             panel.querySelector("#crc-page-1"),
-            panel.querySelector("#crc-page-2")
+            panel.querySelector("#crc-page-2"),
+            panel.querySelector("#crc-page-3")
         ];
 
         const buttons = [
             panel.querySelector("#crc-page-1-btn"),
-            panel.querySelector("#crc-page-2-btn")
+            panel.querySelector("#crc-page-2-btn"),
+            panel.querySelector("#crc-page-3-btn")
         ];
         const copyButtons = [
             panel.querySelector("#crc-copy-page-1"),
-            panel.querySelector("#crc-copy-page-2")
+            panel.querySelector("#crc-copy-page-2"),
+            panel.querySelector("#crc-copy-page-3")
         ];
 
         function switchPage(pageIndex) {
@@ -2548,6 +2701,7 @@ function extractInquiries() {
 
         buttons[0].onclick = function() { switchPage(0); };
         buttons[1].onclick = function() { switchPage(1); };
+        buttons[2].onclick = function() { switchPage(2); };
         // ========================================
         // COPY FUNCTIONS
         // ========================================
@@ -2576,6 +2730,12 @@ function extractInquiries() {
             }
             this.textContent = "✓ COPIED";
             setTimeout(() => { this.textContent = "COPY UNCONNECTED INQUIRIES"; }, 1500);
+        };
+
+        copyButtons[2].onclick = function() {
+            navigator.clipboard.writeText(copyTextAddresses);
+            this.textContent = "✓ COPIED";
+            setTimeout(() => { this.textContent = "COPY PREVIOUS ADDRESSES"; }, 1500);
         };
     }
 
