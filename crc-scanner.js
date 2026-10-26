@@ -1191,6 +1191,46 @@ Controls padding, font, spacing, and appearance for all 3
 /* =========================================================
    INQUIRIES SUBTABS
    ========================================================= */
+#crc-inquiry-date-filter {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin: 8px 4px 14px;
+    padding: 12px;
+    background: #232426;
+    border: 1px solid #424446;
+    border-radius: 10px;
+}
+#crc-inquiry-date-filter[hidden] { display: none !important; }
+#crc-inquiry-date-filter label {
+    font-size: 12px;
+    font-weight: 700;
+}
+#crc-inquiry-before-date {
+    color: #e4e6eb;
+    background: #18191a;
+    border: 1px solid #57595d;
+    border-radius: 6px;
+    padding: 7px;
+    min-height: 34px;
+    box-sizing: border-box;
+    color-scheme: dark;
+}
+#crc-inquiry-date-clear {
+    border: 1px solid #666;
+    border-radius: 6px;
+    color: #e4e6eb;
+    background: #3a3b3c;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+#crc-inquiry-date-summary {
+    flex-basis: 100%;
+    font-size: 11px;
+    color: #b0b3b8;
+}
+
 
 .crc-subtabs {
     display: flex;
@@ -1910,9 +1950,29 @@ Controls padding, font, spacing, and appearance for all 3
         }
 
         const d = new Date(year, month - 1, day);
-        if (isNaN(d.getTime())) return null;
+        if (isNaN(d.getTime()) || d.getFullYear() !== year ||
+            d.getMonth() !== month - 1 || d.getDate() !== day) return null;
 
         return d;
+    }
+
+    // Exclusive YYYY-MM-DD cutoff. E.g. 2025-01-01 shows dates
+    // through December 31, 2024, not January 1, 2025.
+    function filterInquiriesBeforeDate(items, beforeDate) {
+        if (!beforeDate) return items || [];
+        const match = String(beforeDate).match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return items || [];
+        const cutoff = new Date(+match[1], +match[2] - 1, +match[3]);
+        if (cutoff.getFullYear() !== +match[1] ||
+            cutoff.getMonth() !== +match[2] - 1 ||
+            cutoff.getDate() !== +match[3]) return items || [];
+        cutoff.setHours(0, 0, 0, 0);
+        return (items || []).filter(item => {
+            const date = parseInquiryDate(item.date);
+            if (!date) return false; // no verified date: do not include in dated results
+            date.setHours(0, 0, 0, 0);
+            return date < cutoff;
+        });
     }
 
     function filterRecentInquiries(inquiryList, days = 35) {
@@ -3088,6 +3148,30 @@ function extractInquiries() {
 
         inquiriesDiv.appendChild(subtabWrap);
 
+        // Date cutoff applies only to the INQUIRIES subtab. NEW remains
+        // independent and continues showing inquiries from the last 35 days.
+        const dateFilterWrap = document.createElement('div');
+        dateFilterWrap.id = 'crc-inquiry-date-filter';
+        const dateFilterLabel = document.createElement('label');
+        dateFilterLabel.htmlFor = 'crc-inquiry-before-date';
+        dateFilterLabel.textContent = 'Show inquiries BEFORE';
+        const dateFilterInput = document.createElement('input');
+        dateFilterInput.type = 'date';
+        dateFilterInput.id = 'crc-inquiry-before-date';
+        dateFilterInput.value = crcInquiryBeforeDate;
+        dateFilterInput.title = 'Exclusive cutoff: select Jan 1, 2025 to show Dec 2024 and older';
+        const dateFilterClear = document.createElement('button');
+        dateFilterClear.type = 'button';
+        dateFilterClear.id = 'crc-inquiry-date-clear';
+        dateFilterClear.textContent = 'Show all';
+        const dateFilterSummary = document.createElement('div');
+        dateFilterSummary.id = 'crc-inquiry-date-summary';
+        dateFilterWrap.appendChild(dateFilterLabel);
+        dateFilterWrap.appendChild(dateFilterInput);
+        dateFilterWrap.appendChild(dateFilterClear);
+        dateFilterWrap.appendChild(dateFilterSummary);
+        inquiriesDiv.appendChild(dateFilterWrap);
+
         const inquiriesView = document.createElement('div');
         inquiriesView.className = 'crc-inquiries-view';
 
@@ -3109,13 +3193,47 @@ function extractInquiries() {
         // GROUP BY BUREAU
         // ========================================
 
-        const bureauGroups = [
-            { title: "Experian", items: inquiries.filter(i => i.experian) },
-            { title: "Equifax", items: inquiries.filter(i => i.equifax) },
-            { title: "TransUnion", items: inquiries.filter(i => i.transunion) }
+        let regularInquiries = filterInquiriesBeforeDate(inquiries, crcInquiryBeforeDate);
+        let bureauGroups = [
+            { title: "Experian", items: regularInquiries.filter(i => i.experian) },
+            { title: "Equifax", items: regularInquiries.filter(i => i.equifax) },
+            { title: "TransUnion", items: regularInquiries.filter(i => i.transunion) }
         ];
+        function updateDateFilterSummary() {
+            dateFilterSummary.textContent = crcInquiryBeforeDate
+                ? 'Showing ' + regularInquiries.length + ' of ' + inquiries.length +
+                  ' inquiries dated before ' + crcInquiryBeforeDate +
+                  '. Inquiries with missing or invalid dates are excluded.'
+                : 'Showing all ' + inquiries.length + ' inquiries. Set a date to exclude that date and anything newer.';
+        }
+        updateDateFilterSummary();
 
         let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries", crcCopyConnectedInquiries, openInquiryAliasDialog);
+
+        function refreshRegularInquiryDateFilter() {
+            regularInquiries = filterInquiriesBeforeDate(inquiries, crcInquiryBeforeDate);
+            bureauGroups = [
+                { title: "Experian", items: regularInquiries.filter(i => i.experian) },
+                { title: "Equifax", items: regularInquiries.filter(i => i.equifax) },
+                { title: "TransUnion", items: regularInquiries.filter(i => i.transunion) }
+            ];
+            inquiriesView.replaceChildren();
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
+            updateDateFilterSummary();
+        }
+        dateFilterInput.addEventListener('change', () => {
+            crcInquiryBeforeDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(dateFilterInput.value) ? dateFilterInput.value : '';
+            try { localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY, crcInquiryBeforeDate); }
+            catch (_) { /* Filtering works in the current session. */ }
+            refreshRegularInquiryDateFilter();
+        });
+        dateFilterClear.addEventListener('click', () => {
+            dateFilterInput.value = '';
+            crcInquiryBeforeDate = '';
+            try { localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY); }
+            catch (_) { /* Filtering works in the current session. */ }
+            refreshRegularInquiryDateFilter();
+        });
 
         // ========================================
         // NEW INQUIRIES (today back to 35 days ago)
@@ -3365,6 +3483,7 @@ function extractInquiries() {
             inquiriesView.style.display = view === 'inquiries' ? '' : 'none';
             openAccountsView.style.display = view === 'open' ? '' : 'none';
             newInquiriesView.style.display = view === 'new' ? '' : 'none';
+            dateFilterWrap.hidden = view !== 'inquiries';
 
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
