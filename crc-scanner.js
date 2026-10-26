@@ -3222,7 +3222,7 @@ function extractInquiries() {
             updateDateFilterSummary();
         }
         dateFilterInput.addEventListener('change', () => {
-            crcInquiryBeforeDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(dateFilterInput.value) ? dateFilterInput.value : '';
+            crcInquiryBeforeDate = /^\d{4}-\d{2}-\d{2}$/.test(dateFilterInput.value) ? dateFilterInput.value : '';
             try { localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY, crcInquiryBeforeDate); }
             catch (_) { /* Filtering works in the current session. */ }
             refreshRegularInquiryDateFilter();
