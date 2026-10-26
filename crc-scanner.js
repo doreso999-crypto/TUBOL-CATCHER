@@ -183,16 +183,28 @@ const CSS_STYLES = `
     line-height: 1.5;
 }
 
-/* List display mode popover */
+/* Dedicated, readable Settings window (bounded inside the viewport). */
 #crc-top-bar { position: relative; }
+#crc-settings-backdrop[hidden] { display: none !important; }
+#crc-settings-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgba(0,0,0,.65);
+}
 #crc-settings-menu {
-    position: absolute;
-    top: calc(100% - 2px);
-    left: 12px;
-    z-index: 50;
-    width: min(350px, calc(100% - 24px));
-    max-height: min(68vh, 480px);
-    overflow-y: auto;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    z-index: 70;
+    width: min(740px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+    height: min(74vh, 690px);
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     box-sizing: border-box;
     background: #242526;
     color: #e4e6eb;
@@ -203,10 +215,16 @@ const CSS_STYLES = `
 }
 #crc-settings-menu[hidden] { display: none !important; }
 #crc-settings-menu .crc-settings-heading {
-    font-size: 15px;
+    font-size: 19px;
     font-weight: 800;
-    margin-bottom: 14px;
 }
+#crc-settings-menu .crc-settings-heading-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+#crc-settings-close { color:#fff; background:transparent; border:0; border-radius:6px; padding:8px 10px; font-size:18px; cursor:pointer; }
+#crc-settings-tabs { display:flex; gap:8px; margin:12px 0 14px; border-bottom:1px solid #444; }
+#crc-settings-tabs button { color:#d5d7da; background:transparent; border:0; padding:10px; cursor:pointer; font-size:13px; font-weight:700; border-bottom:3px solid transparent; }
+#crc-settings-tabs button.active { border-bottom-color:#3982e4; color:#fff; }
+#crc-settings-content { min-height:0; overflow-y:auto; flex:1; padding:2px 4px 8px; }
+#crc-settings-general[hidden],#crc-settings-aliases[hidden] { display:none !important; }
 #crc-settings-menu label {
     display: block;
     font-size: 13px;
@@ -255,8 +273,10 @@ const CSS_STYLES = `
     accent-color: #2374e1;
 }
 
-#crc-alias-search, #crc-alias-target { width: 100%; box-sizing: border-box; background: #18191a; color: #e4e6eb; padding: 9px; border: 1px solid #55585b; border-radius: 8px; margin: 8px 0; }
-#crc-alias-list { max-height: 250px; overflow-y: auto; background: #18191a; padding: 5px; border: 1px solid #44484b; border-radius: 8px; }
+#crc-alias-search, #crc-alias-target, #crc-alias-new-name { width: 100%; box-sizing: border-box; background: #18191a; color: #e4e6eb; padding: 9px; border: 1px solid #55585b; border-radius: 8px; margin: 8px 0; }
+#crc-alias-new-row[hidden] { display:none !important; }
+#crc-alias-new-btn { display:inline-block; margin:8px 0; border:0; border-radius:7px; padding:10px 12px; color:#fff; background:#2374e1; font-weight:700; cursor:pointer; }
+#crc-alias-list { max-height: none; overflow-y: visible; background: #18191a; padding: 5px; border: 1px solid #44484b; border-radius: 8px; }
 .crc-alias-entity { margin-bottom: 5px; border: 1px solid #353638; border-radius: 6px; }
 .crc-alias-entity summary { cursor: pointer; font-size: 12px; font-weight: 700; padding: 8px; }
 .crc-alias-variation { cursor: context-menu; font-size: 12px; padding: 6px 10px; border-top: 1px solid #353638; overflow-wrap: anywhere; }
@@ -1388,9 +1408,19 @@ Controls padding, font, spacing, and appearance for all 3
     const HTML_TEMPLATE = `
         <!-- TOP BAR -->
         <div id="crc-top-bar">
-            <button id="crc-settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false" aria-controls="crc-settings-menu">⚙</button>
-            <div id="crc-settings-menu" role="region" aria-label="Scanner settings" hidden>
-                <div class="crc-settings-heading">Settings</div>
+            <button id="crc-settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="crc-settings-menu">⚙</button>
+            <div id="crc-settings-backdrop" hidden></div>
+            <div id="crc-settings-menu" role="dialog" aria-modal="true" aria-label="Scanner settings" hidden>
+                <div class="crc-settings-heading-row">
+                    <div class="crc-settings-heading">Scanner Settings</div>
+                    <button type="button" id="crc-settings-close" aria-label="Close settings">✕</button>
+                </div>
+                <div id="crc-settings-tabs" role="tablist" aria-label="Settings sections">
+                    <button type="button" id="crc-settings-tab-general" class="active" role="tab" aria-selected="true">General</button>
+                    <button type="button" id="crc-settings-tab-aliases" role="tab" aria-selected="false">Creditor Aliases</button>
+                </div>
+                <div id="crc-settings-content">
+                <div id="crc-settings-general" role="tabpanel">
                 <label for="crc-display-mode">List Display Format</label>
                 <select id="crc-display-mode">
                     <option value="modern">Modern — Uppercase + (EXP/EQU/TU)</option>
@@ -1411,12 +1441,16 @@ Controls padding, font, spacing, and appearance for all 3
                     <input type="checkbox" id="crc-open-names-only">
                     <span>Show and copy creditor names only</span>
                 </label>
-                <div class="crc-settings-note">All settings are saved on this device. Open Accounts still includes every extracted account.</div>
-                <div class="crc-settings-section-title">Creditor Name Variations</div>
-                <div class="crc-settings-note">Expand any creditor to see its names. Right-click a variation to remove it. Right-click an INQUIRIES or NEW inquiry to add its name to a creditor.</div>
-                <input type="search" id="crc-alias-search" placeholder="Search creditor names" aria-label="Search creditor names">
-                <div id="crc-alias-list" aria-label="Creditor alias manager"></div>
-                <button type="button" id="crc-alias-reset">Restore default aliases</button>
+                <div class="crc-settings-note">Preferences are saved on this device. Open Accounts still includes every extracted account.</div>
+                </div>
+                <div id="crc-settings-aliases" role="tabpanel" hidden>
+                    <div class="crc-settings-note">Search and expand creditors. Right-click a name variation to remove it. Right-click an inquiry or open account to assign its name. Add a new creditor when none match.</div>
+                    <input type="search" id="crc-alias-search" placeholder="Search creditor names" aria-label="Search creditor names">
+                    <button type="button" id="crc-alias-new-btn">+ Add Creditor</button>
+                    <div id="crc-alias-list" aria-label="Creditor alias manager"></div>
+                    <button type="button" id="crc-alias-reset">Restore default aliases</button>
+                </div>
+                </div>
             </div>
             <div id="crc-window-controls">
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
@@ -1426,10 +1460,14 @@ Controls padding, font, spacing, and appearance for all 3
 
         <div class="crc-alias-overlay" id="crc-alias-overlay" role="dialog" aria-modal="true" aria-label="Assign inquiry creditor" hidden>
             <div class="crc-alias-card">
-                <h3>Add inquiry variation</h3>
+                <h3 id="crc-alias-dialog-title">Assign Creditor Name</h3>
                 <div id="crc-alias-name"></div>
                 <label for="crc-alias-target">Assign to creditor</label>
                 <select id="crc-alias-target"></select>
+                <div id="crc-alias-new-row" hidden>
+                    <label for="crc-alias-new-name">New creditor's proper name</label>
+                    <input id="crc-alias-new-name" type="text" maxlength="100" placeholder="e.g. Regional Community Bank">
+                </div>
                 <div id="crc-alias-feedback" class="crc-settings-note">Select the correct creditor. This alias will apply across reports in this browser.</div>
                 <div class="crc-alias-actions">
                     <button type="button" id="crc-alias-cancel">Cancel</button>
@@ -1673,8 +1711,13 @@ Controls padding, font, spacing, and appearance for all 3
             disabledSnapshot.forEach(key => CREDITOR_DISABLED.add(key));
             CREDITOR_CUSTOM.clear();
             customSnapshot.forEach(([key, value]) => CREDITOR_CUSTOM.set(key, value));
-            CREDITOR_ALIAS_GROUPS.splice(CREDITOR_ALIAS_GROUPS.length - CREDITOR_USER_GROUPS.length, CREDITOR_USER_GROUPS.length);
-            CREDITOR_USER_GROUPS.forEach(group => { delete CREDITOR_DISPLAY_NAMES[group.id]; });
+            // Reset may have already removed all custom groups before a failed save.
+            for (let i = CREDITOR_ALIAS_GROUPS.length - 1; i >= 0; i--) {
+                if (CREDITOR_ALIAS_GROUPS[i].id.startsWith('user-')) CREDITOR_ALIAS_GROUPS.splice(i, 1);
+            }
+            Object.keys(CREDITOR_DISPLAY_NAMES).forEach(id => {
+                if (id.startsWith('user-')) delete CREDITOR_DISPLAY_NAMES[id];
+            });
             CREDITOR_USER_GROUPS.splice(0, CREDITOR_USER_GROUPS.length, ...userGroupSnapshot);
             CREDITOR_ALIAS_GROUPS.push(...userGroupSnapshot);
             userGroupSnapshot.forEach(group => { CREDITOR_DISPLAY_NAMES[group.id] = group.aliases[0]; });
