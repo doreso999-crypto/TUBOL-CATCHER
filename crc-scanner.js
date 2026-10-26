@@ -2315,11 +2315,11 @@ function extractInquiries() {
     // ========================================
     // RENDER A SET OF BUREAU-GROUPED INQUIRIES
     // Shared by the INQUIRIES and NEW subtabs.
-    // Returns the plain-text copy string
-    // (UNCONNECTED inquiries only).
+    // Returns plain-text copy output. INQUIRIES copies unconnected
+    // items by default; NEW includes connected recent inquiries.
     // ========================================
 
-    function renderInquiryBureauGroups(container, groups, emptyLabel) {
+    function renderInquiryBureauGroups(container, groups, emptyLabel, includeConnectedInCopy = false) {
         let copyText = '';
 
         groups.forEach(group => {
@@ -2387,19 +2387,20 @@ function extractInquiries() {
             section.appendChild(itemsWrap);
             container.appendChild(section);
 
+            const copyItems = includeConnectedInCopy ? group.items : unconnectedInGroup;
             if (crcDisplayMode === 'legacy') {
                 copyText += group.title.toUpperCase() + ':\n\n';
-                if (!unconnectedInGroup.length) {
-                    copyText += '(No unconnected inquiries)\n\n';
+                if (!copyItems.length) {
+                    copyText += includeConnectedInCopy ? '(No inquiries)\n\n' : '(No unconnected inquiries)\n\n';
                 } else {
-                    unconnectedInGroup.forEach(item => {
+                    copyItems.forEach(item => {
                         copyText += '- ' + (item.creditor || '(No creditor)').toLowerCase() +
                             ' ' + (item.date || '') + '\n';
                     });
                     copyText += '\n';
                 }
             } else {
-                unconnectedInGroup.forEach(item => {
+                copyItems.forEach(item => {
                     const creditorName = String(item.creditor || '(No creditor)').trim().toUpperCase();
                     const dateValue = String(item.date || '').trim();
                     copyText += '- ' + creditorName + (dateValue ? ' ' + dateValue : '') +
@@ -2722,7 +2723,7 @@ function extractInquiries() {
             { title: "TransUnion", items: newInquiries.filter(i => i.transunion) }
         ];
 
-        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries");
+        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", true);
 
         btnNewInquiries.textContent = `NEW (${newInquiries.length})`;
 
@@ -2761,6 +2762,12 @@ function extractInquiries() {
         }
 
         // Subtab switching
+        function inquiryCopyButtonLabel() {
+            if (btnOpenAccounts.classList.contains('active')) return 'COPY OPEN ACCOUNTS';
+            if (btnNewInquiries.classList.contains('active')) return 'COPY ALL NEW INQUIRIES';
+            return 'COPY UNCONNECTED INQUIRIES';
+        }
+
         function setActiveInquirySubtab(view) {
             btnInquiries.classList.toggle('active', view === 'inquiries');
             btnOpenAccounts.classList.toggle('active', view === 'open');
@@ -2770,13 +2777,16 @@ function extractInquiries() {
             openAccountsView.style.display = view === 'open' ? '' : 'none';
             newInquiriesView.style.display = view === 'new' ? '' : 'none';
 
-            // Copy note (spec section 4) only makes sense for the
-            // INQUIRIES / NEW subtabs, since those are the only ones
-            // filtered to unconnected items.
+            // INQUIRIES retains unconnected-only copying; NEW copies every
+            // recent inquiry, including those linked to open accounts.
             const note = panel.querySelector('#crc-inquiry-copy-note');
             if (note) {
+                note.innerHTML = view === 'new'
+                    ? 'All new inquiries are copied, including those connected to open accounts.<br>Always double-check the report before disputing.'
+                    : 'Only unconnected inquiries are copied.<br>Always double-check the report before disputing.';
                 note.classList.toggle('active', view === 'inquiries' || view === 'new');
             }
+            panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
         }
 
         btnInquiries.addEventListener('click', () => setActiveInquirySubtab('inquiries'));
@@ -2812,7 +2822,7 @@ function extractInquiries() {
             copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries');
 
             newInquiriesView.replaceChildren();
-            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries');
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', true);
         });
 
         // Register once so rescanning does not accumulate stale event handlers.
@@ -2909,24 +2919,20 @@ function extractInquiries() {
             setTimeout(() => { this.textContent = "COPY NEGATIVE ACCOUNTS"; }, 1500);
         };
 
-        copyButtons[1].onclick = function() {
-            // Copy depending on active subtab inside inquiries.
-            // Only OPEN ACCOUNTS subtab copies connected-agnostic
-            // account data; INQUIRIES/NEW copy UNCONNECTED only
-            // (already filtered inside renderInquiryBureauGroups).
+        copyButtons[1].onclick = async function() {
+            const text = btnOpenAccounts.classList.contains('active')
+                ? copyTextOpenAccounts
+                : btnNewInquiries.classList.contains('active')
+                    ? copyTextNewInquiries
+                    : copyTextOpenInquiries;
             try {
-                if (btnOpenAccounts.classList.contains('active')) {
-                    navigator.clipboard.writeText(copyTextOpenAccounts || '');
-                } else if (btnNewInquiries.classList.contains('active')) {
-                    navigator.clipboard.writeText(copyTextNewInquiries || '');
-                } else {
-                    navigator.clipboard.writeText(copyTextOpenInquiries || '');
-                }
-            } catch (e) {
-                navigator.clipboard.writeText(copyTextOpenInquiries || '');
+                await navigator.clipboard.writeText(text || '');
+                this.textContent = "✓ COPIED";
+            } catch (error) {
+                console.error('Failed to copy inquiry data:', error);
+                this.textContent = "COPY FAILED";
             }
-            this.textContent = "✓ COPIED";
-            setTimeout(() => { this.textContent = "COPY UNCONNECTED INQUIRIES"; }, 1500);
+            setTimeout(() => { this.textContent = inquiryCopyButtonLabel(); }, 1500);
         };
 
         copyButtons[2].onclick = function() {
