@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.0
+// @version      4.1
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -183,16 +183,28 @@ const CSS_STYLES = `
     line-height: 1.5;
 }
 
-/* List display mode popover */
+/* Dedicated, readable Settings window (bounded inside the viewport). */
 #crc-top-bar { position: relative; }
+#crc-settings-backdrop[hidden] { display: none !important; }
+#crc-settings-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background: rgba(0,0,0,.65);
+}
 #crc-settings-menu {
-    position: absolute;
-    top: calc(100% - 2px);
-    left: 12px;
-    z-index: 50;
-    width: min(350px, calc(100% - 24px));
-    max-height: min(68vh, 480px);
-    overflow-y: auto;
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%,-50%);
+    z-index: 70;
+    width: min(740px, calc(100vw - 48px));
+    max-width: calc(100vw - 48px);
+    height: min(74vh, 690px);
+    max-height: calc(100vh - 48px);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
     box-sizing: border-box;
     background: #242526;
     color: #e4e6eb;
@@ -203,10 +215,16 @@ const CSS_STYLES = `
 }
 #crc-settings-menu[hidden] { display: none !important; }
 #crc-settings-menu .crc-settings-heading {
-    font-size: 15px;
+    font-size: 19px;
     font-weight: 800;
-    margin-bottom: 14px;
 }
+#crc-settings-menu .crc-settings-heading-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+#crc-settings-close { color:#fff; background:transparent; border:0; border-radius:6px; padding:8px 10px; font-size:18px; cursor:pointer; }
+#crc-settings-tabs { display:flex; gap:8px; margin:12px 0 14px; border-bottom:1px solid #444; }
+#crc-settings-tabs button { color:#d5d7da; background:transparent; border:0; padding:10px; cursor:pointer; font-size:13px; font-weight:700; border-bottom:3px solid transparent; }
+#crc-settings-tabs button.active { border-bottom-color:#3982e4; color:#fff; }
+#crc-settings-content { min-height:0; overflow-y:auto; flex:1; padding:2px 4px 8px; }
+#crc-settings-general[hidden],#crc-settings-aliases[hidden] { display:none !important; }
 #crc-settings-menu label {
     display: block;
     font-size: 13px;
@@ -255,8 +273,10 @@ const CSS_STYLES = `
     accent-color: #2374e1;
 }
 
-#crc-alias-search, #crc-alias-target { width: 100%; box-sizing: border-box; background: #18191a; color: #e4e6eb; padding: 9px; border: 1px solid #55585b; border-radius: 8px; margin: 8px 0; }
-#crc-alias-list { max-height: 250px; overflow-y: auto; background: #18191a; padding: 5px; border: 1px solid #44484b; border-radius: 8px; }
+#crc-alias-search, #crc-alias-target, #crc-alias-new-name { width: 100%; box-sizing: border-box; background: #18191a; color: #e4e6eb; padding: 9px; border: 1px solid #55585b; border-radius: 8px; margin: 8px 0; }
+#crc-alias-new-row[hidden] { display:none !important; }
+#crc-alias-new-btn { display:inline-block; margin:8px 0; border:0; border-radius:7px; padding:10px 12px; color:#fff; background:#2374e1; font-weight:700; cursor:pointer; }
+#crc-alias-list { max-height: none; overflow-y: visible; background: #18191a; padding: 5px; border: 1px solid #44484b; border-radius: 8px; }
 .crc-alias-entity { margin-bottom: 5px; border: 1px solid #353638; border-radius: 6px; }
 .crc-alias-entity summary { cursor: pointer; font-size: 12px; font-weight: 700; padding: 8px; }
 .crc-alias-variation { cursor: context-menu; font-size: 12px; padding: 6px 10px; border-top: 1px solid #353638; overflow-wrap: anywhere; }
@@ -264,8 +284,8 @@ const CSS_STYLES = `
 .crc-alias-custom { color: #95caff; }
 #crc-alias-reset { border-radius: 7px; padding: 8px; cursor: pointer; color: #ddd; background: transparent; border: 1px solid #55585b; margin-top: 8px; }
 .crc-alias-overlay[hidden] { display: none !important; }
-.crc-alias-overlay { position: absolute; inset: 0; z-index: 100; padding: 15px; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; }
-.crc-alias-card { background: #242526; border: 1px solid #53575a; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
+.crc-alias-overlay { position: fixed; inset: 0; z-index: 100; padding: 15px; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.crc-alias-card { background: #242526; border: 1px solid #53575a; border-radius: 12px; padding: 18px; width: min(480px, calc(100vw - 36px)); max-height: min(76vh, 550px); overflow-y: auto; box-sizing: border-box; }
 .crc-alias-card h3 { margin: 0 0 8px; }
 #crc-alias-name { font-size: 13px; margin: 8px 0; overflow-wrap: anywhere; }
 .crc-alias-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
@@ -1388,9 +1408,19 @@ Controls padding, font, spacing, and appearance for all 3
     const HTML_TEMPLATE = `
         <!-- TOP BAR -->
         <div id="crc-top-bar">
-            <button id="crc-settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false" aria-controls="crc-settings-menu">⚙</button>
-            <div id="crc-settings-menu" role="region" aria-label="Scanner settings" hidden>
-                <div class="crc-settings-heading">Settings</div>
+            <button id="crc-settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="crc-settings-menu">⚙</button>
+            <div id="crc-settings-backdrop" hidden></div>
+            <div id="crc-settings-menu" role="dialog" aria-modal="true" aria-label="Scanner settings" hidden>
+                <div class="crc-settings-heading-row">
+                    <div class="crc-settings-heading">Scanner Settings</div>
+                    <button type="button" id="crc-settings-close" aria-label="Close settings">✕</button>
+                </div>
+                <div id="crc-settings-tabs" role="tablist" aria-label="Settings sections">
+                    <button type="button" id="crc-settings-tab-general" class="active" role="tab" aria-selected="true">General</button>
+                    <button type="button" id="crc-settings-tab-aliases" role="tab" aria-selected="false">Creditor Aliases</button>
+                </div>
+                <div id="crc-settings-content">
+                <div id="crc-settings-general" role="tabpanel">
                 <label for="crc-display-mode">List Display Format</label>
                 <select id="crc-display-mode">
                     <option value="modern">Modern — Uppercase + (EXP/EQU/TU)</option>
@@ -1411,12 +1441,16 @@ Controls padding, font, spacing, and appearance for all 3
                     <input type="checkbox" id="crc-open-names-only">
                     <span>Show and copy creditor names only</span>
                 </label>
-                <div class="crc-settings-note">All settings are saved on this device. Open Accounts still includes every extracted account.</div>
-                <div class="crc-settings-section-title">Creditor Name Variations</div>
-                <div class="crc-settings-note">Expand any creditor to see its names. Right-click a variation to remove it. Right-click an INQUIRIES or NEW inquiry to add its name to a creditor.</div>
-                <input type="search" id="crc-alias-search" placeholder="Search creditor names" aria-label="Search creditor names">
-                <div id="crc-alias-list" aria-label="Creditor alias manager"></div>
-                <button type="button" id="crc-alias-reset">Restore default aliases</button>
+                <div class="crc-settings-note">Preferences are saved on this device. Open Accounts still includes every extracted account.</div>
+                </div>
+                <div id="crc-settings-aliases" role="tabpanel" hidden>
+                    <div class="crc-settings-note">Search and expand creditors. Right-click a name variation to remove it. Right-click an inquiry or open account to assign its name. Add a new creditor when none match.</div>
+                    <input type="search" id="crc-alias-search" placeholder="Search creditor names" aria-label="Search creditor names">
+                    <button type="button" id="crc-alias-new-btn">+ Add Creditor</button>
+                    <div id="crc-alias-list" aria-label="Creditor alias manager"></div>
+                    <button type="button" id="crc-alias-reset">Restore default aliases</button>
+                </div>
+                </div>
             </div>
             <div id="crc-window-controls">
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
@@ -1426,10 +1460,14 @@ Controls padding, font, spacing, and appearance for all 3
 
         <div class="crc-alias-overlay" id="crc-alias-overlay" role="dialog" aria-modal="true" aria-label="Assign inquiry creditor" hidden>
             <div class="crc-alias-card">
-                <h3>Add inquiry variation</h3>
+                <h3 id="crc-alias-dialog-title">Assign Creditor Name</h3>
                 <div id="crc-alias-name"></div>
                 <label for="crc-alias-target">Assign to creditor</label>
                 <select id="crc-alias-target"></select>
+                <div id="crc-alias-new-row" hidden>
+                    <label for="crc-alias-new-name">New creditor's proper name</label>
+                    <input id="crc-alias-new-name" type="text" maxlength="100" placeholder="e.g. Regional Community Bank">
+                </div>
                 <div id="crc-alias-feedback" class="crc-settings-note">Select the correct creditor. This alias will apply across reports in this browser.</div>
                 <div class="crc-alias-actions">
                     <button type="button" id="crc-alias-cancel">Cancel</button>
@@ -1571,6 +1609,7 @@ Controls padding, font, spacing, and appearance for all 3
     const CREDITOR_BASE_INDEX = new Map();
     const CREDITOR_DISABLED = new Set();
     const CREDITOR_CUSTOM = new Map();
+    const CREDITOR_USER_GROUPS = [];
 
     function creditorAliasKey(value) {
         return normalizeCreditorLabel(value);
@@ -1582,6 +1621,21 @@ Controls padding, font, spacing, and appearance for all 3
             if (!json) return;
             const stored = JSON.parse(json);
             if (stored.version !== 1) return;
+            // Preserve compatibility with v4.0 saved aliases. Custom groups
+            // were added in v4.1, within the existing version-1 schema.
+            (Array.isArray(stored.groups) ? stored.groups : []).slice(0, 200).forEach(item => {
+                if (!item || typeof item.id !== 'string' || typeof item.name !== 'string') return;
+                const name = item.name.trim();
+                const id = item.id;
+                const key = creditorAliasKey(name);
+                if (!/^user-[a-z0-9-]+$/.test(id) || name.length < 2 || name.length > 100 || !key) return;
+                if (CREDITOR_DISPLAY_NAMES[id] ||
+                    Object.values(CREDITOR_DISPLAY_NAMES).some(other => creditorAliasKey(other) === key)) return;
+                const group = { id, aliases: [name] };
+                CREDITOR_USER_GROUPS.push(group);
+                CREDITOR_ALIAS_GROUPS.push(group);
+                CREDITOR_DISPLAY_NAMES[id] = name;
+            });
             (Array.isArray(stored.disabled) ? stored.disabled : []).slice(0, 1000).forEach(value => {
                 if (typeof value === 'string' && value.length <= 100 && creditorAliasKey(value)) {
                     CREDITOR_DISABLED.add(creditorAliasKey(value));
@@ -1645,16 +1699,29 @@ Controls padding, font, spacing, and appearance for all 3
     function commitCreditorOverrideChange(callback) {
         const disabledSnapshot = [...CREDITOR_DISABLED];
         const customSnapshot = [...CREDITOR_CUSTOM];
+        const userGroupSnapshot = [...CREDITOR_USER_GROUPS];
         callback();
         try {
             localStorage.setItem(CRC_ALIAS_KEY, JSON.stringify({
-                version: 1, disabled: [...CREDITOR_DISABLED], custom: [...CREDITOR_CUSTOM.values()]
+                version: 1, disabled: [...CREDITOR_DISABLED], custom: [...CREDITOR_CUSTOM.values()],
+                groups: CREDITOR_USER_GROUPS.map(group => ({ id: group.id, name: CREDITOR_DISPLAY_NAMES[group.id] }))
             }));
         } catch (_) {
             CREDITOR_DISABLED.clear();
             disabledSnapshot.forEach(key => CREDITOR_DISABLED.add(key));
             CREDITOR_CUSTOM.clear();
             customSnapshot.forEach(([key, value]) => CREDITOR_CUSTOM.set(key, value));
+            // Reset may have already removed all custom groups before a failed save.
+            for (let i = CREDITOR_ALIAS_GROUPS.length - 1; i >= 0; i--) {
+                if (CREDITOR_ALIAS_GROUPS[i].id.startsWith('user-')) CREDITOR_ALIAS_GROUPS.splice(i, 1);
+            }
+            Object.keys(CREDITOR_DISPLAY_NAMES).forEach(id => {
+                if (id.startsWith('user-')) delete CREDITOR_DISPLAY_NAMES[id];
+            });
+            CREDITOR_USER_GROUPS.splice(0, CREDITOR_USER_GROUPS.length, ...userGroupSnapshot);
+            CREDITOR_ALIAS_GROUPS.push(...userGroupSnapshot);
+            userGroupSnapshot.forEach(group => { CREDITOR_DISPLAY_NAMES[group.id] = group.aliases[0]; });
+            rebuildCreditorIndex();
             return { ok: false, message: 'Could not save creditor aliases in browser storage.' };
         }
         rebuildCreditorIndex();
@@ -1699,8 +1766,55 @@ Controls padding, font, spacing, and appearance for all 3
             if (baseAlias) CREDITOR_DISABLED.add(key);
         });
     }
+    function createCreditorGroup(displayName, observedVariation = '') {
+        const name = String(displayName || '').trim();
+        const key = creditorAliasKey(name);
+        const observed = String(observedVariation || '').trim();
+        const observedKey = creditorAliasKey(observed);
+        if (name.length < 2 || name.length > 100 || !key)
+            return { ok: false, message: 'Creditor name must be 2–100 characters.' };
+        if (CREDITOR_USER_GROUPS.length >= 200)
+            return { ok: false, message: 'Custom creditor limit reached.' };
+        const duplicateName = resolveCreditorGroup(name);
+        if (duplicateName || Object.values(CREDITOR_DISPLAY_NAMES).some(label => creditorAliasKey(label) === key))
+            return { ok: false, message: 'This creditor already exists. Select the existing creditor.' };
+        if (observed && (observed.length < 2 || observed.length > 100 || !observedKey))
+            return { ok: false, message: 'Variation must be 2–100 characters.' };
+        const observedGroup = observed ? resolveCreditorGroup(observed) : null;
+        if (observedGroup)
+            return { ok: false, message: 'The selected variation already belongs to ' + CREDITOR_DISPLAY_NAMES[observedGroup] + '.' };
+        const slug = key.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+        let id = 'user-' + slug, count = 2;
+        while (CREDITOR_DISPLAY_NAMES[id]) id = 'user-' + slug + '-' + count++;
+        const result = commitCreditorOverrideChange(() => {
+            const group = { id, aliases: [name] };
+            CREDITOR_USER_GROUPS.push(group);
+            CREDITOR_ALIAS_GROUPS.push(group);
+            CREDITOR_DISPLAY_NAMES[id] = name;
+            if (observed && observedKey !== key) CREDITOR_CUSTOM.set(observedKey, { alias: observed, groupId: id });
+        });
+        return { ...result, groupId: result.ok ? id : null };
+    }
+    function deleteUserCreditorGroup(groupId) {
+        const index = CREDITOR_USER_GROUPS.findIndex(group => group.id === groupId);
+        if (index < 0) return { ok: false, message: 'Built-in creditors cannot be deleted.' };
+        return commitCreditorOverrideChange(() => {
+            CREDITOR_CUSTOM.forEach((value, key) => { if (value.groupId === groupId) CREDITOR_CUSTOM.delete(key); });
+            CREDITOR_DISABLED.delete(creditorAliasKey(CREDITOR_DISPLAY_NAMES[groupId]));
+            const group = CREDITOR_USER_GROUPS[index];
+            CREDITOR_USER_GROUPS.splice(index, 1);
+            CREDITOR_ALIAS_GROUPS.splice(CREDITOR_ALIAS_GROUPS.indexOf(group), 1);
+            delete CREDITOR_DISPLAY_NAMES[groupId];
+        });
+    }
     function resetCreditorAliases() {
-        return commitCreditorOverrideChange(() => { CREDITOR_DISABLED.clear(); CREDITOR_CUSTOM.clear(); });
+        return commitCreditorOverrideChange(() => {
+            CREDITOR_DISABLED.clear();
+            CREDITOR_CUSTOM.clear();
+            CREDITOR_ALIAS_GROUPS.splice(CREDITOR_ALIAS_GROUPS.length - CREDITOR_USER_GROUPS.length, CREDITOR_USER_GROUPS.length);
+            CREDITOR_USER_GROUPS.forEach(group => { delete CREDITOR_DISPLAY_NAMES[group.id]; });
+            CREDITOR_USER_GROUPS.length = 0;
+        });
     }
     loadCreditorOverrides();
     rebuildCreditorIndex();
@@ -3075,6 +3189,11 @@ function extractInquiries() {
                     card.appendChild(meta);
                 }
 
+                card.title = 'Right-click to assign this open-account name to a creditor';
+                card.addEventListener('contextmenu', event => {
+                    event.preventDefault();
+                    openInquiryAliasDialog({ creditor: acc.account }, 'open account');
+                });
                 openAccountsView.appendChild(card);
             });
 
@@ -3104,15 +3223,18 @@ function extractInquiries() {
         const aliasDialog = panel.querySelector('#crc-alias-overlay');
         const aliasTarget = panel.querySelector('#crc-alias-target');
         const aliasFeedback = panel.querySelector('#crc-alias-feedback');
-        const aliasGroupsSorted = [...CREDITOR_ALIAS_GROUPS].sort((a,b) =>
+        const aliasGroupsSorted = () => [...CREDITOR_ALIAS_GROUPS].sort((a,b) =>
             CREDITOR_DISPLAY_NAMES[a.id].localeCompare(CREDITOR_DISPLAY_NAMES[b.id]));
         let selectedInquiryAlias = '';
+        const aliasNewRow = panel.querySelector('#crc-alias-new-row');
+        const aliasNewNameInput = panel.querySelector('#crc-alias-new-name');
+        const aliasDialogTitle = panel.querySelector('#crc-alias-dialog-title');
 
         function renderAliasSettings() {
             const query = normalizeCreditorLabel(aliasSearch.value);
             const expanded = new Set([...aliasList.querySelectorAll('details[open]')].map(el => el.dataset.group));
             aliasList.replaceChildren();
-            aliasGroupsSorted.forEach(group => {
+            aliasGroupsSorted().forEach(group => {
                 const displayName = CREDITOR_DISPLAY_NAMES[group.id];
                 const variants = listCreditorAliases(group.id);
                 if (query && !normalizeCreditorLabel(displayName).includes(query) &&
@@ -3124,6 +3246,16 @@ function extractInquiries() {
                 const title = document.createElement('summary');
                 title.textContent = displayName + ' (' + variants.length + ')';
                 details.appendChild(title);
+                if (CREDITOR_USER_GROUPS.some(custom => custom.id === group.id)) {
+                    title.title = 'Right-click to delete this custom creditor';
+                    title.addEventListener('contextmenu', event => {
+                        event.preventDefault();
+                        if (!window.confirm('Delete the custom creditor "' + displayName + '" and its variations?')) return;
+                        const result = deleteUserCreditorGroup(group.id);
+                        if (!result.ok) window.alert(result.message);
+                        else { renderAliasSettings(); updateInquiryAliasHighlights(); }
+                    });
+                }
                 variants.forEach(variant => {
                     const row = document.createElement('div');
                     row.className = 'crc-alias-variation' + (variant.custom ? ' crc-alias-custom' : '');
@@ -3159,37 +3291,63 @@ function extractInquiries() {
             aliasDialog.hidden = true;
             selectedInquiryAlias = '';
         }
-        function openInquiryAliasDialog(item) {
+        function syncNewCreditorInput() {
+            const creating = aliasTarget.value === '__new__';
+            aliasNewRow.hidden = !creating;
+            panel.querySelector('#crc-alias-save').textContent = creating ? 'Create creditor' : 'Add alias';
+            if (creating) aliasNewNameInput.focus();
+        }
+        function openInquiryAliasDialog(item, source = 'inquiry') {
             selectedInquiryAlias = String(item?.creditor || '').trim();
-            if (!selectedInquiryAlias) return;
+            if (!selectedInquiryAlias && source !== 'manual') return;
             aliasTarget.replaceChildren();
             const placeholder = document.createElement('option');
             placeholder.value = '';
             placeholder.textContent = 'Select a creditor...';
             aliasTarget.appendChild(placeholder);
-            aliasGroupsSorted.forEach(group => {
+            aliasGroupsSorted().forEach(group => {
                 const option = document.createElement('option');
                 option.value = group.id;
                 option.textContent = CREDITOR_DISPLAY_NAMES[group.id];
                 aliasTarget.appendChild(option);
             });
-            aliasTarget.value = resolveCreditorGroup(selectedInquiryAlias) || '';
-            panel.querySelector('#crc-alias-name').textContent = 'Inquiry: ' + selectedInquiryAlias;
-            aliasFeedback.textContent = 'Select the correct creditor. Saved aliases affect matching in all reports on this browser.';
+            const newOption = document.createElement('option');
+            newOption.value = '__new__';
+            newOption.textContent = '+ Create a new creditor';
+            aliasTarget.appendChild(newOption);
+            aliasTarget.value = source === 'manual' ? '__new__' : (resolveCreditorGroup(selectedInquiryAlias) || '');
+            aliasNewNameInput.value = '';
+            aliasDialogTitle.textContent = source === 'manual' ? 'Create Creditor' : 'Assign Creditor Name';
+            panel.querySelector('#crc-alias-name').textContent = selectedInquiryAlias
+                ? (source === 'open account' ? 'Open account: ' : 'Inquiry: ') + selectedInquiryAlias
+                : 'Enter a proper creditor name to add it to your list.';
+            aliasFeedback.textContent = 'Names are stored locally. Assign only when these really refer to the same creditor.';
             aliasDialog.hidden = false;
-            aliasTarget.focus();
+            syncNewCreditorInput();
+            if (aliasNewRow.hidden) aliasTarget.focus();
         }
+        aliasTarget.addEventListener('change', syncNewCreditorInput);
+        panel.querySelector('#crc-alias-new-btn').addEventListener('click', () => openInquiryAliasDialog(null, 'manual'));
         panel.querySelector('#crc-alias-cancel').addEventListener('click', closeInquiryAliasDialog);
         panel.querySelector('#crc-alias-save').addEventListener('click', () => {
-            const result = addCreditorAlias(selectedInquiryAlias, aliasTarget.value);
+            let result;
+            if (aliasTarget.value === '__new__') {
+                result = createCreditorGroup(aliasNewNameInput.value, selectedInquiryAlias);
+            } else {
+                if (!selectedInquiryAlias) {
+                    aliasFeedback.textContent = 'Choose Create a new creditor to add a creditor without a variation.';
+                    return;
+                }
+                result = addCreditorAlias(selectedInquiryAlias, aliasTarget.value);
+            }
             aliasFeedback.textContent = result.message;
             if (!result.ok) return;
             renderAliasSettings();
             updateInquiryAliasHighlights();
             closeInquiryAliasDialog();
         });
-        aliasDialog.addEventListener('click', e => {
-            if (e.target === aliasDialog) closeInquiryAliasDialog();
+        aliasDialog.addEventListener('click', event => {
+            if (event.target === aliasDialog) closeInquiryAliasDialog();
         });
         renderAliasSettings();
 
@@ -3245,13 +3403,34 @@ function extractInquiries() {
         copyConnectedNewInput.checked = crcCopyConnectedNew;
         openNamesOnlyInput.checked = crcOpenNamesOnly;
 
+        const settingsBackdrop = panel.querySelector('#crc-settings-backdrop');
+        const settingsGeneral = panel.querySelector('#crc-settings-general');
+        const settingsAliases = panel.querySelector('#crc-settings-aliases');
+        const settingsGeneralTab = panel.querySelector('#crc-settings-tab-general');
+        const settingsAliasesTab = panel.querySelector('#crc-settings-tab-aliases');
+        function selectSettingsTab(which) {
+            const aliases = which === 'aliases';
+            settingsGeneral.hidden = aliases;
+            settingsAliases.hidden = !aliases;
+            settingsGeneralTab.classList.toggle('active', !aliases);
+            settingsAliasesTab.classList.toggle('active', aliases);
+            settingsGeneralTab.setAttribute('aria-selected', String(!aliases));
+            settingsAliasesTab.setAttribute('aria-selected', String(aliases));
+        }
         function setSettingsOpen(open) {
             settingsMenu.hidden = !open;
+            settingsBackdrop.hidden = !open;
             settingsButton.setAttribute('aria-expanded', String(open));
+            if (open) panel.querySelector('#crc-settings-close').focus();
+            else settingsButton.focus();
         }
         settingsButton.addEventListener('click', () => {
             setSettingsOpen(settingsMenu.hidden);
         });
+        settingsGeneralTab.addEventListener('click', () => selectSettingsTab('general'));
+        settingsAliasesTab.addEventListener('click', () => selectSettingsTab('aliases'));
+        panel.querySelector('#crc-settings-close').addEventListener('click', () => setSettingsOpen(false));
+        settingsBackdrop.addEventListener('click', () => setSettingsOpen(false));
         formatSelect.addEventListener('change', () => {
             saveCrcDisplayMode(formatSelect.value);
             panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
@@ -3288,26 +3467,25 @@ function extractInquiries() {
             renderOpenAccounts();
         });
 
-        // Register once so rescanning does not accumulate stale event handlers.
+        // Document-level Escape handler is registered once across rescans.
         if (!window.__crcSettingsDismissHandlerAdded) {
             window.__crcSettingsDismissHandlerAdded = true;
-            document.addEventListener('pointerdown', event => {
-                const current = document.querySelector('#crc-negative-panel');
-                const menu = current?.querySelector('#crc-settings-menu');
-                const button = current?.querySelector('#crc-settings-btn');
-                if (menu && button && !menu.hidden &&
-                    !menu.contains(event.target) && !button.contains(event.target)) {
-                    menu.hidden = true;
-                    button.setAttribute('aria-expanded', 'false');
-                }
-            });
             document.addEventListener('keydown', event => {
                 if (event.key !== 'Escape') return;
                 const current = document.querySelector('#crc-negative-panel');
-                const menu = current?.querySelector('#crc-settings-menu');
-                const button = current?.querySelector('#crc-settings-btn');
-                if (menu && button && !menu.hidden) {
-                    menu.hidden = true;
+                if (!current) return;
+                const aliasOverlay = current.querySelector('#crc-alias-overlay');
+                if (aliasOverlay && !aliasOverlay.hidden) {
+                    aliasOverlay.hidden = true;
+                    return;
+                }
+                const modal = current.querySelector('#crc-settings-menu');
+                if (!modal || modal.hidden) return;
+                modal.hidden = true;
+                const backdrop = current.querySelector('#crc-settings-backdrop');
+                if (backdrop) backdrop.hidden = true;
+                const button = current.querySelector('#crc-settings-btn');
+                if (button) {
                     button.setAttribute('aria-expanded', 'false');
                     button.focus();
                 }
@@ -3315,6 +3493,7 @@ function extractInquiries() {
         }
 
         panel.querySelector("#crc-close-btn").onclick = function() {
+            setSettingsOpen(false);
             panel.remove();
         };
 
