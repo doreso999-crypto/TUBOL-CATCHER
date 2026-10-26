@@ -3189,6 +3189,11 @@ function extractInquiries() {
                     card.appendChild(meta);
                 }
 
+                card.title = 'Right-click to assign this open-account name to a creditor';
+                card.addEventListener('contextmenu', event => {
+                    event.preventDefault();
+                    openInquiryAliasDialog({ creditor: acc.account }, 'open account');
+                });
                 openAccountsView.appendChild(card);
             });
 
@@ -3218,15 +3223,18 @@ function extractInquiries() {
         const aliasDialog = panel.querySelector('#crc-alias-overlay');
         const aliasTarget = panel.querySelector('#crc-alias-target');
         const aliasFeedback = panel.querySelector('#crc-alias-feedback');
-        const aliasGroupsSorted = [...CREDITOR_ALIAS_GROUPS].sort((a,b) =>
+        const aliasGroupsSorted = () => [...CREDITOR_ALIAS_GROUPS].sort((a,b) =>
             CREDITOR_DISPLAY_NAMES[a.id].localeCompare(CREDITOR_DISPLAY_NAMES[b.id]));
         let selectedInquiryAlias = '';
+        const aliasNewRow = panel.querySelector('#crc-alias-new-row');
+        const aliasNewNameInput = panel.querySelector('#crc-alias-new-name');
+        const aliasDialogTitle = panel.querySelector('#crc-alias-dialog-title');
 
         function renderAliasSettings() {
             const query = normalizeCreditorLabel(aliasSearch.value);
             const expanded = new Set([...aliasList.querySelectorAll('details[open]')].map(el => el.dataset.group));
             aliasList.replaceChildren();
-            aliasGroupsSorted.forEach(group => {
+            aliasGroupsSorted().forEach(group => {
                 const displayName = CREDITOR_DISPLAY_NAMES[group.id];
                 const variants = listCreditorAliases(group.id);
                 if (query && !normalizeCreditorLabel(displayName).includes(query) &&
@@ -3238,6 +3246,16 @@ function extractInquiries() {
                 const title = document.createElement('summary');
                 title.textContent = displayName + ' (' + variants.length + ')';
                 details.appendChild(title);
+                if (CREDITOR_USER_GROUPS.some(custom => custom.id === group.id)) {
+                    title.title = 'Right-click to delete this custom creditor';
+                    title.addEventListener('contextmenu', event => {
+                        event.preventDefault();
+                        if (!window.confirm('Delete the custom creditor "' + displayName + '" and its variations?')) return;
+                        const result = deleteUserCreditorGroup(group.id);
+                        if (!result.ok) window.alert(result.message);
+                        else { renderAliasSettings(); updateInquiryAliasHighlights(); }
+                    });
+                }
                 variants.forEach(variant => {
                     const row = document.createElement('div');
                     row.className = 'crc-alias-variation' + (variant.custom ? ' crc-alias-custom' : '');
@@ -3273,37 +3291,63 @@ function extractInquiries() {
             aliasDialog.hidden = true;
             selectedInquiryAlias = '';
         }
-        function openInquiryAliasDialog(item) {
+        function syncNewCreditorInput() {
+            const creating = aliasTarget.value === '__new__';
+            aliasNewRow.hidden = !creating;
+            panel.querySelector('#crc-alias-save').textContent = creating ? 'Create creditor' : 'Add alias';
+            if (creating) aliasNewNameInput.focus();
+        }
+        function openInquiryAliasDialog(item, source = 'inquiry') {
             selectedInquiryAlias = String(item?.creditor || '').trim();
-            if (!selectedInquiryAlias) return;
+            if (!selectedInquiryAlias && source !== 'manual') return;
             aliasTarget.replaceChildren();
             const placeholder = document.createElement('option');
             placeholder.value = '';
             placeholder.textContent = 'Select a creditor...';
             aliasTarget.appendChild(placeholder);
-            aliasGroupsSorted.forEach(group => {
+            aliasGroupsSorted().forEach(group => {
                 const option = document.createElement('option');
                 option.value = group.id;
                 option.textContent = CREDITOR_DISPLAY_NAMES[group.id];
                 aliasTarget.appendChild(option);
             });
-            aliasTarget.value = resolveCreditorGroup(selectedInquiryAlias) || '';
-            panel.querySelector('#crc-alias-name').textContent = 'Inquiry: ' + selectedInquiryAlias;
-            aliasFeedback.textContent = 'Select the correct creditor. Saved aliases affect matching in all reports on this browser.';
+            const newOption = document.createElement('option');
+            newOption.value = '__new__';
+            newOption.textContent = '+ Create a new creditor';
+            aliasTarget.appendChild(newOption);
+            aliasTarget.value = source === 'manual' ? '__new__' : (resolveCreditorGroup(selectedInquiryAlias) || '');
+            aliasNewNameInput.value = '';
+            aliasDialogTitle.textContent = source === 'manual' ? 'Create Creditor' : 'Assign Creditor Name';
+            panel.querySelector('#crc-alias-name').textContent = selectedInquiryAlias
+                ? (source === 'open account' ? 'Open account: ' : 'Inquiry: ') + selectedInquiryAlias
+                : 'Enter a proper creditor name to add it to your list.';
+            aliasFeedback.textContent = 'Names are stored locally. Assign only when these really refer to the same creditor.';
             aliasDialog.hidden = false;
-            aliasTarget.focus();
+            syncNewCreditorInput();
+            if (aliasNewRow.hidden) aliasTarget.focus();
         }
+        aliasTarget.addEventListener('change', syncNewCreditorInput);
+        panel.querySelector('#crc-alias-new-btn').addEventListener('click', () => openInquiryAliasDialog(null, 'manual'));
         panel.querySelector('#crc-alias-cancel').addEventListener('click', closeInquiryAliasDialog);
         panel.querySelector('#crc-alias-save').addEventListener('click', () => {
-            const result = addCreditorAlias(selectedInquiryAlias, aliasTarget.value);
+            let result;
+            if (aliasTarget.value === '__new__') {
+                result = createCreditorGroup(aliasNewNameInput.value, selectedInquiryAlias);
+            } else {
+                if (!selectedInquiryAlias) {
+                    aliasFeedback.textContent = 'Choose Create a new creditor to add a creditor without a variation.';
+                    return;
+                }
+                result = addCreditorAlias(selectedInquiryAlias, aliasTarget.value);
+            }
             aliasFeedback.textContent = result.message;
             if (!result.ok) return;
             renderAliasSettings();
             updateInquiryAliasHighlights();
             closeInquiryAliasDialog();
         });
-        aliasDialog.addEventListener('click', e => {
-            if (e.target === aliasDialog) closeInquiryAliasDialog();
+        aliasDialog.addEventListener('click', event => {
+            if (event.target === aliasDialog) closeInquiryAliasDialog();
         });
         renderAliasSettings();
 
