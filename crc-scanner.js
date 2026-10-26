@@ -284,8 +284,8 @@ const CSS_STYLES = `
 .crc-alias-custom { color: #95caff; }
 #crc-alias-reset { border-radius: 7px; padding: 8px; cursor: pointer; color: #ddd; background: transparent; border: 1px solid #55585b; margin-top: 8px; }
 .crc-alias-overlay[hidden] { display: none !important; }
-.crc-alias-overlay { position: absolute; inset: 0; z-index: 100; padding: 15px; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; }
-.crc-alias-card { background: #242526; border: 1px solid #53575a; border-radius: 12px; padding: 16px; width: 100%; box-sizing: border-box; }
+.crc-alias-overlay { position: fixed; inset: 0; z-index: 100; padding: 15px; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+.crc-alias-card { background: #242526; border: 1px solid #53575a; border-radius: 12px; padding: 18px; width: min(480px, calc(100vw - 36px)); max-height: min(76vh, 550px); overflow-y: auto; box-sizing: border-box; }
 .crc-alias-card h3 { margin: 0 0 8px; }
 #crc-alias-name { font-size: 13px; margin: 8px 0; overflow-wrap: anywhere; }
 .crc-alias-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
