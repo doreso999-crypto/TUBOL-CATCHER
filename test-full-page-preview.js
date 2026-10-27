@@ -13,7 +13,10 @@ assert(source.includes("window.open('about:blank', '_blank')"), 'Must open tab f
 assert(source.includes('renderFullPageReportPreview(previewWindow, {'), 'Preview button needs live snapshot');
 assert(source.includes('const CRC_FULL_PREVIEW_CSS = '), 'Full-screen responsive CSS needed');
 assert(source.includes('max-width:1160px'), 'Full-page layout should be much wider than extractor');
-assert(!implementation.includes('localStorage.'), 'Must not persist report contents');
+assert(!implementation.includes("localStorage.setItem(CRC_PANEL_POSITION_KEY"),
+    'Report content must not be stored in position settings');
+assert(implementation.includes('localStorage.setItem(CRC_PREVIEW_LAYOUT_KEY'),
+    'Only the selected presentation layout is persisted');
 assert(!implementation.includes('fetch('), 'Must not send report information over network');
 assert(!implementation.includes('innerHTML'), 'Never interpolate user credit-report values as HTML');
 
@@ -77,7 +80,8 @@ class Element {
     }
 }
 class PreviewDocument {
-    constructor(){this.head=new Element('head');this.body=new Element('body');this.opened=false;this.closed=false;}
+    constructor(){this.head=new Element('head');this.body=new Element('body');this.opened=false;this.closed=false;this.listeners={};}
+    addEventListener(type,fn){this.listeners[type]=fn;}
     open(){this.opened=true;}
     write(markup){this.staticMarkup=markup;}
     close(){this.closed=true;}
@@ -121,10 +125,16 @@ const snap={
 };
 const makeDisputeCard=item=>origin('crc-dispute-card',item.account);
 const copyDispute=item=>item.account+' xxx123(exp-equ)';
-const renderer=new Function('CSS_STYLES','CRC_FULL_PREVIEW_CSS',
-    'renderDisputeAccountCard','formatDisputedAccountCopy',
+const fakeStorage=new Map();
+const localStorageMock={
+    getItem(key){return fakeStorage.get(key)||null;},
+    setItem(key,value){fakeStorage.set(key,value);}
+};
+const renderer=new Function('CSS_STYLES','CRC_FULL_PREVIEW_CSS','CRC_PREVIEW_LAYOUT_KEY',
+    'localStorage','renderDisputeAccountCard','formatDisputedAccountCopy',
     implementation+'\nreturn renderFullPageReportPreview;')(
         '#crc-negative-panel{width:440px}','.crc-preview-layout{max-width:1160px}',
+        'tubol-crc-preview-layout-v1',localStorageMock,
         makeDisputeCard,copyDispute
     );
 return (async()=>{
