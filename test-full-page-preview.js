@@ -217,6 +217,7 @@ await openTab.click();
 assert.equal(preview.activeCopyText(),'OPEN ACCOUNT ORIGINAL');
 preview.setDisplayLayout('list');
 assert.equal(fakeStorage.get('tubol-crc-preview-layout-v1'),'list');
+preview.selectPage('personal');
 assert.equal(preview.pages.personal.hidden,false);
 preview.setDisplayLayout('grid');
 assert.equal(fakeStorage.get('tubol-crc-preview-layout-v1'),'grid');
