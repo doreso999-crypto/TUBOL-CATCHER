@@ -101,17 +101,28 @@ assert.equal(p.style.left,'840px');
 assert.equal(p.style.top,'108px');
 p.bar.events.pointerup(event(2,2000,1200));
 assert.deepEqual(JSON.parse(storage.get('tubol-crc-panel-position-v1')), {left:840,top:108});
+// Minimize anchors to the previous top-right corner: as width shrinks
+// from 440 to 300, the left edge moves 140px right, not stay at 840px.
+const beforeMinimize = p.getBoundingClientRect();
 p.minimized=true;
-controller.reclamp();
-assert.equal(p.style.left,'840px','Minimize retains position');
-p.bar.events.pointerdown(event(3,1000,205));
+controller.keepTopRightAnchor(beforeMinimize.right, beforeMinimize.top);
+controller.savePosition();
+assert.equal(p.style.left,'980px','Minimize should preserve the right edge');
+assert.equal(p.getBoundingClientRect().right, beforeMinimize.right);
+assert.equal(p.style.top,'108px');
+assert.equal(JSON.parse(storage.get('tubol-crc-panel-position-v1')).left,980);
+p.bar.events.pointerdown(event(3,1000,130));
 p.bar.events.pointermove(event(3,0,0));
 p.bar.events.pointerup(event(3,0,0));
 assert.equal(p.style.left,'0px');
 assert.equal(p.style.top,'0px');
+const beforeRestore = p.getBoundingClientRect();
 p.minimized=false;
-controller.reclamp();
+controller.keepTopRightAnchor(beforeRestore.right, beforeRestore.top);
+controller.savePosition();
 assert.equal(p.style.left,'0px');
+// The viewport clamp is allowed to shift a window back into view.
+assert.equal(p.style.top,'0px');
 window.innerWidth=480;
 window.innerHeight=560;
 const resize=Array.from(listeners.resize)[0];
@@ -125,6 +136,25 @@ const loaded = makePanel();
 const newController=drag.installExtractorDragging(loaded);
 assert.equal(loaded.style.left,'0px','Position should survive re-initialization');
 newController.destroy();
+
+// When there is enough room, minimize AND restore preserve the same right
+// edge without shifting the window horizontally.
+window.innerWidth=1280;
+window.innerHeight=900;
+const centered = makePanel();
+const centeredControls=drag.installExtractorDragging(centered);
+centeredControls.keepTopRightAnchor(1050,20);
+const expandedRect=centered.getBoundingClientRect();
+centered.minimized=true;
+centeredControls.keepTopRightAnchor(expandedRect.right,expandedRect.top);
+assert.equal(centered.getBoundingClientRect().right,1050);
+assert.equal(centered.style.left,'750px');
+const collapsedRect=centered.getBoundingClientRect();
+centered.minimized=false;
+centeredControls.keepTopRightAnchor(collapsedRect.right,collapsedRect.top);
+assert.equal(centered.style.left,'610px');
+assert.equal(centered.getBoundingClientRect().right,1050);
+centeredControls.destroy();
 assert.equal(listeners.resize.size,0);
 
 assert(source.includes('id="crc-panel-opacity"'));
@@ -145,4 +175,8 @@ const template = slice('    const HTML_TEMPLATE = \`',
 const barEnd=template.indexOf('        </div>\n\n',template.indexOf('<div id="crc-top-bar">'));
 const backdrop=template.indexOf('id="crc-settings-backdrop"');
 assert(backdrop > barEnd, 'Settings must be outside the draggable header');
-console.log('PASS: original panel dimensions, slightly larger text, 1% opacity control, dragging, bounds, persistence, safe buttons');
+assert(source.includes('dragControls.keepTopRightAnchor(before.right, before.top);'),
+    'Minimize handler must apply top-right anchoring');
+assert(source.includes('dragControls.savePosition();'),
+    'Minimized/restored coordinates must persist');
+console.log('PASS: original size, 1% opacity, top-right minimize/restore, drag bounds, persistence and safe buttons');
