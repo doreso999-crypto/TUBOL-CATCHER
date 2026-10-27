@@ -3820,6 +3820,29 @@ function extractInquiries() {
             make('button', 'crc-preview-copy', 'Copy current view'));
         copyButton.type = 'button';
 
+        const toolbar = put(layout, make('div','crc-preview-toolbar'));
+        const layoutControl = put(toolbar,make('div','crc-preview-layout-control'));
+        layoutControl.setAttribute('role','group');
+        layoutControl.setAttribute('aria-label','Report layout');
+        const layoutButtons = new Map();
+        let displayLayout = 'grid';
+        try {
+            const storedLayout = localStorage.getItem(CRC_PREVIEW_LAYOUT_KEY);
+            if (['grid','table','list'].includes(storedLayout)) displayLayout = storedLayout;
+        } catch (_) { /* Default to grid. */ }
+        ['grid','table','list'].forEach(name => {
+            const label = name.charAt(0).toUpperCase()+name.slice(1);
+            const button = put(layoutControl,make('button','crc-preview-layout-btn',label));
+            button.type='button';
+            button.setAttribute('aria-pressed',String(name===displayLayout));
+            button.addEventListener('click',()=>setDisplayLayout(name));
+            layoutButtons.set(name,button);
+        });
+        const settingsOpenButton = put(toolbar,make('button','crc-preview-settings-btn','Settings'));
+        settingsOpenButton.type='button';
+        settingsOpenButton.setAttribute('aria-haspopup','dialog');
+        settingsOpenButton.setAttribute('aria-expanded','false');
+
         const nav = put(layout, make('nav', 'crc-preview-nav'));
         nav.setAttribute('aria-label', 'Report sections');
         nav.setAttribute('role', 'tablist');
@@ -3839,6 +3862,9 @@ function extractInquiries() {
             pages[name].setAttribute('role', 'tabpanel');
             mainTabs.set(name, makeTab(nav, pageLabels[name], () => selectPage(name)));
         });
+        const tablePane = makePane(layout,'crc-preview-table-pane');
+        const tableHost = put(tablePane,make('div','crc-preview-table-wrap'));
+
 
         // NEGATIVE: the same normal display plus all three Disputed Mode
         // categories, which are built from full bureau data on demand.
@@ -3871,6 +3897,7 @@ function extractInquiries() {
         function selectDisputedCategory(name) {
             disputedCategory = name;
             markSelected(disputeButtons, name);
+            if (displayLayout === 'table' && activePage === 'negative') renderPreviewTable();
             disputeContent.replaceChildren();
             const items = snapshot.disputeCategories[name] || [];
             if (!items.length) {
@@ -3886,6 +3913,7 @@ function extractInquiries() {
             markSelected(negativeTabs,name);
             for (const [key,pane] of Object.entries(negativePanes)) pane.hidden = key !== name;
             if (name === 'disputed') selectDisputedCategory(disputedCategory);
+            if (displayLayout === 'table' && activePage === 'negative') renderPreviewTable();
         }
 
         // INQUIRIES: separate regular, open-account and new lists. Filters and
@@ -3916,6 +3944,7 @@ function extractInquiries() {
         function selectInquiryMode(name) {
             inquiryMode = name;
             markSelected(inquiryTabs,name);
+            if (displayLayout === 'table' && activePage === 'inquiries') renderPreviewTable();
             Object.entries(inquiryPanes).forEach(([key,pane]) => { pane.hidden = key !== name; });
         }
 
@@ -3930,10 +3959,104 @@ function extractInquiries() {
         put(layout,make('footer','crc-preview-footer',
             'Private, local snapshot. This tab does not automatically refresh; reopen it from TUBOL CATCHER after rescanning or changing settings. No report values are placed in browser storage or sent to a server by the preview.'));
 
+        // Table mode renders structured data (not a screenshot or text split)
+        // so every tab and subtab can be compared using readable columns.
+        function currentTableModel() {
+            if (activePage === 'negative') {
+                if (negativeMode === 'disputed') {
+                    const items = snapshot.disputeCategories[disputedCategory] || [];
+                    return {
+                        headers:['Creditor','Type','Account # / Reference','Balance / Status','Other reported data'],
+                        rows:items.map(item => {
+                            const groups=getDisputeFieldGroups(item);
+                            return [
+                                item.account || 'Bankruptcy',item.account_type || '',
+                                (groups.primary[0]?.lines || []).join('\n') || 'Not reported',
+                                (groups.primary[1]?.lines || []).join('\n') || 'Not reported',
+                                groups.primary.slice(2).concat(groups.details)
+                                    .map(x=>x.label + ':\n'+x.lines.join('\n')).join('\n\n')
+                            ];
+                        })
+                    };
+                }
+                const negative = snapshot.negativeData || [];
+                const bank = snapshot.bankruptcies || [];
+                return {headers:['Creditor','Account number / Reference','Balance / Filed','Bureau / Status'],
+                    rows:bank.map(x=>[x.type||'Bankruptcy',x.reference||'',x.date||'',x.status||''])
+                        .concat(negative.map(x=>[
+                            x.account||'',x.account_number||'',x.balance||'',
+                            (x.bureau_display||'')+' '+(x.account_type||'')
+                        ]))};
+            }
+            if (activePage === 'inquiries') {
+                if (inquiryMode === 'open') {
+                    const columns = previewSettings.openNamesOnly
+                        ? ['Creditor'] : ['Creditor','Account number','Balance','Bureau','Status'];
+                    return {headers:columns,rows:(snapshot.openAccounts||[]).map(item=>
+                        previewSettings.openNamesOnly?[item.account||'']:[
+                            item.account||'',item.account_number||'',item.balance||'',
+                            item.bureau_display||'',item.account_type||''
+                        ])};
+                }
+                const items = inquiryMode === 'new'
+                    ? (snapshot.newInquiries || [])
+                    : filterInquiriesBeforeDate(snapshot.inquiries || [],previewSettings.beforeDate);
+                const rows=[];
+                for (const item of items) {
+                    for (const bureau of [{key:'experian',code:'EXP'},{key:'equifax',code:'EQU'},{key:'transunion',code:'TU'}]) {
+                        if (!item[bureau.key]) continue;
+                        rows.push([item.creditor||'',item.date||'',bureau.code,
+                            /already disputed/i.test(item.action||'')?'AD':'ND',
+                            item.connectedToOpen?'Possible open-account match':'No confirmed open-account match']);
+                    }
+                }
+                return {headers:['Creditor','Date','Bureau','Dispute','Match'],rows};
+            }
+            const rows=[];
+            for (const [name,groups] of [['Previous address',snapshot.previousAddresses||{}],
+                ['Employer',snapshot.employers||{}]]) {
+                for (const bureau of [{key:'EX',code:'EXP'},{key:'EQU',code:'EQU'},{key:'TU',code:'TU'}]) {
+                    for (const item of (groups[bureau.key]||[])) {
+                        rows.push([name,item.address||'',item.date||'',bureau.code]);
+                    }
+                }
+            }
+            return {headers:['Information','Value','Date','Bureau'],rows};
+        }
+        function renderPreviewTable() {
+            tableHost.replaceChildren();
+            const model = currentTableModel();
+            if (!model.rows.length) {
+                put(tableHost,make('div','crc-preview-empty','No records in this section.'));
+                return;
+            }
+            const table=put(tableHost,make('table','crc-preview-table'));
+            const head=put(put(table,make('thead')),make('tr'));
+            model.headers.forEach(label=>put(head,make('th','',label)));
+            const body=put(table,make('tbody'));
+            for(const values of model.rows) {
+                const row=put(body,make('tr'));
+                values.forEach(value=>put(row,make('td','',String(value ?? ''))));
+            }
+        }
+        function setDisplayLayout(name) {
+            if (!['grid','table','list'].includes(name)) return;
+            displayLayout=name;
+            root.setAttribute('data-crc-layout',name);
+            for(const [key,button] of layoutButtons) {
+                button.classList.toggle('active',key===name);
+                button.setAttribute('aria-pressed',String(key===name));
+            }
+            try { localStorage.setItem(CRC_PREVIEW_LAYOUT_KEY,name); }
+            catch (_) { /* Layout remains active for this tab. */ }
+            selectPage(activePage);
+        }
         function selectPage(name) {
             activePage = name;
             markSelected(mainTabs,name);
-            Object.entries(pages).forEach(([key,pane]) => { pane.hidden = key !== name; });
+            Object.entries(pages).forEach(([key,pane]) => { pane.hidden = key !== name || displayLayout === 'table'; });
+            tablePane.hidden = displayLayout !== 'table';
+            if (displayLayout === 'table') renderPreviewTable();
         }
         function activeCopyText() {
             if (activePage === 'personal') return snapshot.copyPersonalInfo;
@@ -3970,10 +4093,10 @@ function extractInquiries() {
 
         selectNegativeMode(negativeMode);
         selectInquiryMode(inquiryMode);
-        selectPage(activePage);
+        setDisplayLayout(displayLayout);
         previewWindow.focus();
         return { doc, pages, selectPage, selectNegativeMode, selectInquiryMode,
-            selectDisputedCategory, activeCopyText };
+            selectDisputedCategory, activeCopyText, setDisplayLayout, currentTableModel };
     }
 
     function showResults(negativeData) {
