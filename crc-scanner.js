@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.8
+// @version      4.9
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -1707,12 +1707,76 @@ Controls padding, font, spacing, and appearance for all 3
     // HTML TEMPLATE
     // ========================================
 
+
+    // Full-page preview lives in a separate about:blank tab, never in storage
+    // or a third-party site. Its report values are added as text DOM nodes.
+    const CRC_FULL_PREVIEW_CSS = `
+body { margin:0; background:#14171b; color:#e4e6eb; }
+*, *::before, *::after { box-sizing:border-box; }
+#crc-negative-panel.crc-preview-page {
+    position:static; inset:auto; width:100%; max-width:none;
+    min-height:100vh; height:auto; max-height:none; margin:0; padding:0;
+    border:0; border-radius:0; box-shadow:none; overflow:visible;
+    display:block; background:#14171b; color:#e4e6eb;
+}
+.crc-preview-layout { max-width:1160px; margin:0 auto; padding:28px clamp(14px,4vw,42px) 75px; }
+.crc-preview-header { display:flex; align-items:center; justify-content:space-between; gap:18px;
+    flex-wrap:wrap; padding:10px 0 20px; }
+.crc-preview-header h1 { margin:0; color:#fff; font-size:28px; line-height:1.25; }
+.crc-preview-kicker { font-size:12px; color:#91b9f0; font-weight:800; letter-spacing:.08em; margin-bottom:7px; }
+.crc-preview-meta { color:#b0b8c3; font-size:13px; margin-top:7px; line-height:1.4; }
+.crc-preview-actions { display:flex; gap:10px; align-items:center; }
+.crc-preview-copy { padding:12px 18px; min-height:44px; border:1px solid #347fe9;
+    border-radius:9px; background:#2374e1; color:#fff; font-size:14px; font-weight:750; cursor:pointer; }
+.crc-preview-copy:hover { background:#3982e4; }
+.crc-preview-copy:focus-visible, .crc-preview-tab:focus-visible { outline:2px solid #9bc4ff; outline-offset:2px; }
+.crc-preview-nav { display:flex; align-items:center; gap:6px; padding:8px; border:1px solid #3c434d;
+    background:#22262b; border-radius:12px; margin:0 0 22px; flex-wrap:wrap; }
+.crc-preview-tab { border:0; border-radius:8px; padding:11px 17px;
+    background:transparent; color:#b0bac8; cursor:pointer; font-size:14px; font-weight:750; }
+.crc-preview-tab.active { color:#fff; background:#384656; }
+.crc-preview-view[hidden], .crc-preview-pane[hidden] { display:none !important; }
+.crc-preview-view { min-height:55vh; }
+.crc-preview-subnav { display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+    padding:0 0 14px; margin:0 0 10px; border-bottom:1px solid #38404a; }
+.crc-preview-subnav .crc-preview-tab { padding:9px 13px; font-size:13px; }
+.crc-preview-intro { color:#bac3cd; font-size:13px; line-height:1.5; margin:3px 0 18px; }
+.crc-preview-page #crc-results { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px;
+    padding:4px 0 10px; background:transparent; }
+.crc-preview-page #crc-results > div { margin:0; padding:19px 20px; }
+.crc-preview-page #crc-dispute-results { display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+    gap:14px; padding:4px 0 10px; }
+.crc-preview-page .crc-dispute-card { margin:0; padding:18px 20px; }
+.crc-preview-page .crc-dispute-value { font-size:15px; }
+.crc-preview-page #crc-inquiries { width:100%; padding:5px 0 24px; background:transparent; }
+.crc-preview-page .crc-inquiry-section { margin-bottom:16px; }
+.crc-preview-page .crc-inquiry-items { padding:4px 8px 8px; }
+.crc-preview-page .crc-open-accounts-view { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
+    gap:12px; }
+.crc-preview-page .crc-open-account { margin:0; }
+.crc-preview-page .crc-personal-section { padding:0 0 18px; }
+.crc-preview-page .crc-personal-heading { padding-left:0; margin-bottom:10px; }
+.crc-preview-page .crc-inquiry-bureau { cursor:pointer; }
+.crc-preview-page .crc-inquiry-bureau:focus-visible { outline:2px solid #8bb7fa; outline-offset:2px; }
+.crc-preview-footer { border-top:1px solid #343a41; color:#9ea9b6; padding:20px 0 0;
+    margin-top:25px; font-size:12px; line-height:1.5; }
+@media(max-width:660px) {
+    .crc-preview-header h1 { font-size:23px; }
+    .crc-preview-page #crc-results, .crc-preview-page #crc-dispute-results,
+    .crc-preview-page .crc-open-accounts-view { display:block; }
+    .crc-preview-page #crc-results > div, .crc-preview-page .crc-dispute-card,
+    .crc-preview-page .crc-open-account { margin-bottom:12px; }
+    .crc-preview-tab { padding:10px 12px; font-size:12px; }
+}
+`;
+
     const HTML_TEMPLATE = `
         <!-- TOP BAR -->
         <div id="crc-top-bar">
             <button id="crc-settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="crc-settings-menu">⚙</button>
             <div id="crc-drag-handle" aria-hidden="true" title="Drag to move the extractor">DRAG TO MOVE</div>
             <div id="crc-window-controls">
+                <button id="crc-open-preview-btn" type="button" class="crc-window-btn" title="Open report preview in a new tab" aria-label="Open full-page report preview">↗</button>
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
             </div>
         </div>
@@ -3556,6 +3620,257 @@ function extractInquiries() {
         return { reclamp, keepTopRightAnchor, savePosition, destroy };
     }
 
+    // Render a readable, self-contained snapshot from the current extraction.
+    // Never persist report data in localStorage, a URL, or a remote service.
+    // The button opens about:blank synchronously inside its click handler to
+    // avoid popup blockers; only local DOM/text nodes cross into the new tab.
+    function renderFullPageReportPreview(previewWindow, snapshot) {
+        const doc = previewWindow.document;
+        doc.open();
+        doc.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TUBOL CATCHER - Report Preview</title></head><body></body></html>');
+        doc.close();
+
+        const style = doc.createElement('style');
+        style.textContent = CSS_STYLES + '\n' + CRC_FULL_PREVIEW_CSS;
+        doc.head.appendChild(style);
+
+        function make(tag, className, text) {
+            const item = doc.createElement(tag);
+            if (className) item.className = className;
+            if (text !== undefined) item.textContent = text;
+            return item;
+        }
+        function put(parent, child) {
+            parent.appendChild(child);
+            return child;
+        }
+        function makeTab(parent, label, setSelected) {
+            const button = put(parent, make('button', 'crc-preview-tab', label));
+            button.type = 'button';
+            button.setAttribute('role', 'tab');
+            button.addEventListener('click', setSelected);
+            return button;
+        }
+        function markSelected(buttons, current) {
+            buttons.forEach((button, key) => {
+                const active = key === current;
+                button.classList.toggle('active', active);
+                button.setAttribute('aria-selected', String(active));
+            });
+        }
+        function makePane(parent, className) {
+            const pane = put(parent, make('section', 'crc-preview-pane' + (className ? ' ' + className : '')));
+            pane.hidden = true;
+            return pane;
+        }
+        function addIntro(parent, text) {
+            return put(parent, make('p', 'crc-preview-intro', text));
+        }
+        // Cloning extracted DOM preserves its text formatting without
+        // copying interactive handlers from the small extractor. Native
+        // <details> still expands; bureau headers get new handlers below.
+        function cloneList(original, parent) {
+            const node = original.cloneNode(true);
+            node.style.display = '';
+            node.hidden = false;
+            node.querySelectorAll('.crc-collapsed').forEach(section => {
+                section.classList.remove('crc-collapsed');
+            });
+            node.querySelectorAll('.crc-inquiry-row, .crc-open-account').forEach(card => {
+                card.removeAttribute('title'); // Alias editing happens in the original tab.
+            });
+            node.querySelector('#crc-open-accounts-copy-all')?.remove();
+            node.querySelectorAll('.crc-inquiry-bureau').forEach(header => {
+                const section = header.closest('.crc-inquiry-section');
+                if (!section) return;
+                header.setAttribute('role', 'button');
+                header.setAttribute('tabindex', '0');
+                header.setAttribute('aria-expanded', 'true');
+                const toggle = () => {
+                    const collapsed = section.classList.toggle('crc-collapsed');
+                    header.setAttribute('aria-expanded', String(!collapsed));
+                };
+                header.addEventListener('click', toggle);
+                header.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggle();
+                    }
+                });
+            });
+            parent.appendChild(node);
+            return node;
+        }
+
+        const root = put(doc.body, make('div', 'crc-preview-page'));
+        root.id = 'crc-negative-panel';
+        const layout = put(root, make('main', 'crc-preview-layout'));
+        const header = put(layout, make('header', 'crc-preview-header'));
+        const titleBox = put(header, make('div'));
+        put(titleBox, make('div', 'crc-preview-kicker', 'TUBOL CATCHER'));
+        put(titleBox, make('h1', '', 'Full-page report preview'));
+        put(titleBox, make('div', 'crc-preview-meta',
+            'Snapshot from your current report · ' + new Date().toLocaleString()));
+        const copyButton = put(put(header, make('div', 'crc-preview-actions')),
+            make('button', 'crc-preview-copy', 'Copy current view'));
+        copyButton.type = 'button';
+
+        const nav = put(layout, make('nav', 'crc-preview-nav'));
+        nav.setAttribute('aria-label', 'Report sections');
+        nav.setAttribute('role', 'tablist');
+        const pageNames = ['negative', 'inquiries', 'personal'];
+        const pageLabels = { negative: 'Negative accounts', inquiries: 'Inquiries', personal: 'Personal info' };
+        const pages = {};
+        const mainTabs = new Map();
+        let activePage = pageNames.includes(snapshot.activePage) ? snapshot.activePage : 'negative';
+        let negativeMode = snapshot.negativeMode === 'disputed' ? 'disputed' : 'standard';
+        let disputedCategory = ['delete','updated','bankruptcy'].includes(snapshot.disputedCategory)
+            ? snapshot.disputedCategory : 'delete';
+        let inquiryMode = ['inquiries','open','new'].includes(snapshot.inquiryMode)
+            ? snapshot.inquiryMode : 'inquiries';
+
+        pageNames.forEach(name => {
+            pages[name] = makePane(layout, 'crc-preview-view');
+            pages[name].setAttribute('role', 'tabpanel');
+            mainTabs.set(name, makeTab(nav, pageLabels[name], () => selectPage(name)));
+        });
+
+        // NEGATIVE: the same normal display plus all three Disputed Mode
+        // categories, which are built from full bureau data on demand.
+        const negativeTabsNav = put(pages.negative, make('div', 'crc-preview-subnav'));
+        negativeTabsNav.setAttribute('role','tablist');
+        const negativeTabs = new Map();
+        const negativePanes = {
+            standard: makePane(pages.negative),
+            disputed: makePane(pages.negative)
+        };
+        negativeTabs.set('standard', makeTab(negativeTabsNav,'All accounts',()=>selectNegativeMode('standard')));
+        negativeTabs.set('disputed', makeTab(negativeTabsNav,'Disputed Mode',()=>selectNegativeMode('disputed')));
+        addIntro(negativePanes.standard,
+            'Preferred-bureau summary from the extractor. Use Settings in the original tab to change priority.');
+        cloneList(snapshot.negativeResults, negativePanes.standard);
+
+        const disputeNav = put(negativePanes.disputed, make('div', 'crc-preview-subnav'));
+        disputeNav.setAttribute('role','tablist');
+        const disputeLabels = {delete:'Delete',updated:'Updated',bankruptcy:'Bankruptcy'};
+        const disputeButtons = new Map();
+        addIntro(negativePanes.disputed,
+            'All bureau values; identical values share labels. Expand Other reported data to see additional fields.');
+        const disputeContent = put(negativePanes.disputed, make('div'));
+        disputeContent.id = 'crc-dispute-results';
+        ['delete','updated','bankruptcy'].forEach(key => {
+            const count = (snapshot.disputeCategories[key] || []).length;
+            disputeButtons.set(key,makeTab(disputeNav,disputeLabels[key] + ' (' + count + ')',
+                ()=>selectDisputedCategory(key)));
+        });
+        function selectDisputedCategory(name) {
+            disputedCategory = name;
+            markSelected(disputeButtons, name);
+            disputeContent.replaceChildren();
+            const items = snapshot.disputeCategories[name] || [];
+            if (!items.length) {
+                put(disputeContent, make('div','crc-dispute-empty', 'No ' + name + ' records in this snapshot.'));
+            } else {
+                const fragment = doc.createDocumentFragment();
+                items.forEach(item => fragment.appendChild(renderDisputeAccountCard(item)));
+                disputeContent.appendChild(fragment);
+            }
+        }
+        function selectNegativeMode(name) {
+            negativeMode = name;
+            markSelected(negativeTabs,name);
+            for (const [key,pane] of Object.entries(negativePanes)) pane.hidden = key !== name;
+            if (name === 'disputed') selectDisputedCategory(disputedCategory);
+        }
+
+        // INQUIRIES: separate regular, open-account and new lists. Filters and
+        // copy preferences are snapshotted; no report data goes into storage.
+        const inquiryRoot = put(pages.inquiries, make('div'));
+        inquiryRoot.id = 'crc-inquiries';
+        const inquiryNav = put(inquiryRoot, make('div','crc-preview-subnav'));
+        inquiryNav.setAttribute('role','tablist');
+        const inquiryTabs = new Map();
+        const inquiryPanes = {
+            inquiries: makePane(inquiryRoot),
+            open: makePane(inquiryRoot),
+            new: makePane(inquiryRoot)
+        };
+        const dateNote = snapshot.beforeDate
+            ? 'Showing inquiries dated before ' + snapshot.beforeDate + ' (selected date excluded).'
+            : 'Showing all extracted inquiries.';
+        addIntro(inquiryPanes.inquiries,
+            dateNote + ' Change the date filter in the original extractor and reopen this preview to refresh.');
+        cloneList(snapshot.inquiriesView,inquiryPanes.inquiries);
+        addIntro(inquiryPanes.open,'All open accounts from the extracted report.');
+        cloneList(snapshot.openAccountsView,inquiryPanes.open);
+        addIntro(inquiryPanes.new,'Recent inquiries (last 35 days) from the extracted report.');
+        cloneList(snapshot.newInquiriesView,inquiryPanes.new);
+        inquiryTabs.set('inquiries',makeTab(inquiryNav,'Inquiries',()=>selectInquiryMode('inquiries')));
+        inquiryTabs.set('open',makeTab(inquiryNav,'Open accounts',()=>selectInquiryMode('open')));
+        inquiryTabs.set('new',makeTab(inquiryNav,'New inquiries',()=>selectInquiryMode('new')));
+        function selectInquiryMode(name) {
+            inquiryMode = name;
+            markSelected(inquiryTabs,name);
+            Object.entries(inquiryPanes).forEach(([key,pane]) => { pane.hidden = key !== name; });
+        }
+
+        // PERSONAL INFO: retain bureau-grouped previous addresses and employers.
+        const personalAddresses = put(pages.personal,make('section','crc-personal-section'));
+        put(personalAddresses,make('h2','crc-personal-heading','PREVIOUS ADDRESSES'));
+        cloneList(snapshot.addressesView,personalAddresses);
+        const personalEmployers = put(pages.personal,make('section','crc-personal-section'));
+        put(personalEmployers,make('h2','crc-personal-heading','EMPLOYERS'));
+        cloneList(snapshot.employersView,personalEmployers);
+
+        put(layout,make('footer','crc-preview-footer',
+            'Private, local snapshot. This tab does not automatically refresh; reopen it from TUBOL CATCHER after rescanning or changing settings. No report values are placed in browser storage or sent to a server by the preview.'));
+
+        function selectPage(name) {
+            activePage = name;
+            markSelected(mainTabs,name);
+            Object.entries(pages).forEach(([key,pane]) => { pane.hidden = key !== name; });
+        }
+        function activeCopyText() {
+            if (activePage === 'personal') return snapshot.copyPersonalInfo;
+            if (activePage === 'inquiries') return inquiryMode === 'open'
+                ? snapshot.copyOpenAccounts
+                : inquiryMode === 'new' ? snapshot.copyNewInquiries : snapshot.copyInquiries;
+            return negativeMode === 'standard'
+                ? snapshot.copyNegative
+                : (snapshot.disputeCategories[disputedCategory] || [])
+                    .map(formatDisputedAccountCopy).join('\n\n');
+        }
+        copyButton.addEventListener('click', async () => {
+            const copy = activeCopyText();
+            let copied = false;
+            try {
+                await previewWindow.navigator.clipboard.writeText(copy || '');
+                copied = true;
+            } catch (_) {
+                // Clipboard API can be unavailable on an about:blank tab.
+                const textarea = make('textarea');
+                textarea.value = copy || '';
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                doc.body.appendChild(textarea);
+                textarea.select();
+                try { copied = Boolean(doc.execCommand('copy')); } catch (_) { /* blocked */ }
+                textarea.remove();
+            }
+            copyButton.textContent = copied ? 'Copied' : 'Copy blocked by browser';
+            previewWindow.setTimeout(() => {
+                if (!previewWindow.closed) copyButton.textContent = 'Copy current view';
+            }, 1500);
+        });
+
+        selectNegativeMode(negativeMode);
+        selectInquiryMode(inquiryMode);
+        selectPage(activePage);
+        previewWindow.focus();
+        return { doc, pages, selectPage, selectNegativeMode, selectInquiryMode,
+            selectDisputedCategory, activeCopyText };
+    }
+
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
         const bankruptcyTables = extractBankruptcyTables();
@@ -4477,6 +4792,43 @@ function extractInquiries() {
             this.textContent = "✓ COPIED";
             setTimeout(() => { this.textContent = "COPY PERSONAL INFO"; }, 1500);
         };
+
+        panel.querySelector('#crc-open-preview-btn').addEventListener('click', () => {
+            // Window.open must run directly from this click, before any awaits.
+            // An empty same-origin tab never exposes the report through a URL.
+            const previewWindow = window.open('about:blank', '_blank');
+            if (!previewWindow) {
+                window.alert('Your browser blocked the new tab. Allow pop-ups for Credit Repair Cloud, then try again.');
+                return;
+            }
+            try {
+                renderFullPageReportPreview(previewWindow, {
+                    negativeResults: results,
+                    disputeCategories,
+                    inquiriesView,
+                    openAccountsView,
+                    newInquiriesView,
+                    addressesView: addressesDiv,
+                    employersView: employersDiv,
+                    copyNegative: copyTextNegative,
+                    copyInquiries: copyTextOpenInquiries,
+                    copyOpenAccounts: copyTextOpenAccounts,
+                    copyNewInquiries: copyTextNewInquiries,
+                    copyPersonalInfo: copyTextPersonalInfo,
+                    beforeDate: crcInquiryBeforeDate,
+                    activePage: buttons[2].classList.contains('active') ? 'personal'
+                        : buttons[1].classList.contains('active') ? 'inquiries' : 'negative',
+                    negativeMode: disputedModeActive ? 'disputed' : 'standard',
+                    disputedCategory: disputeCategory,
+                    inquiryMode: btnOpenAccounts.classList.contains('active') ? 'open'
+                        : btnNewInquiries.classList.contains('active') ? 'new' : 'inquiries'
+                });
+            } catch (err) {
+                console.error('Unable to open full-page report preview:', err);
+                try { previewWindow.close(); } catch (_) { /* Browser controls the tab. */ }
+                window.alert('The preview could not be opened. Your extractor is still available.');
+            }
+        });
     }
 
     // ========================================

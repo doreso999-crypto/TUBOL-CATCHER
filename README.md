@@ -1,5 +1,33 @@
 # TUBOL-CATCHER
 
+## Full-page report preview (v4.9)
+
+Click the **↗ Open full-page report preview** button in the extractor's top
+bar, beside **Minimize**. A separate browser tab opens with a spacious,
+responsive report preview instead of the 440px-wide floating panel.
+
+- **Negative accounts** has **All accounts** and **Disputed Mode** views.
+  Disputed Mode has **Delete**, **Updated**, and **Bankruptcy** categories,
+  including expandable bureau-specific details.
+- **Inquiries** has **Inquiries**, **Open accounts**, and **New inquiries**.
+  The currently selected inquiry cutoff and copy preferences are reflected
+  in the snapshot. Bureau sections remain expandable.
+- **Personal info** shows previous addresses and employers by bureau.
+- The **Copy current view** button uses the selected section/subsection
+  and its existing copy rules. The original extractor remains open and
+  fully usable; the preview also works when the extractor is minimized.
+
+**Privacy:** The preview opens a locally generated `about:blank` tab and
+renders report data as DOM text. No report values are put into URLs,
+browser storage, or outbound requests by this feature. The tab is a
+**snapshot**, not a live synchronized report: after rescanning or changing
+settings, reopen the preview using the ↗ button. Close the preview tab
+normally when finished. If the browser blocks it, allow pop-ups for Credit
+Repair Cloud.
+
+Run `node test-full-page-preview.js` to validate the page layout,
+navigation, copy behavior, expandable bureau lists, and snapshot isolation.
+
 ## Safer extractor window (v4.8)
 
 The main extractor window no longer has an **X / Close** button, to prevent
