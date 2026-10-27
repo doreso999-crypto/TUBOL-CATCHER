@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.6
+// @version      4.7
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -22,6 +22,21 @@
     const CRC_INQUIRY_BEFORE_DATE_KEY = 'tubol-crc-inquiry-before-date';
     const CRC_PANEL_OPACITY_KEY = 'tubol-crc-panel-opacity';
     const CRC_PANEL_POSITION_KEY = 'tubol-crc-panel-position-v1';
+    const CRC_BUREAU_PRIORITY_KEY = 'tubol-crc-negative-bureau-priority';
+    const CRC_BUREAUS = [
+        { field: 'experian', label: 'Experian', code: 'exp' },
+        { field: 'equifax', label: 'Equifax', code: 'equ' },
+        { field: 'transunion', label: 'TransUnion', code: 'tu' }
+    ];
+    function getBureauPriorityOrder(preferred) {
+        const chosen = CRC_BUREAUS.some(b => b.field === preferred) ? preferred : 'equifax';
+        return [chosen, ...['equifax','experian','transunion'].filter(x => x !== chosen)];
+    }
+    function loadBureauPriority() {
+        try { return getBureauPriorityOrder(localStorage.getItem(CRC_BUREAU_PRIORITY_KEY))[0]; }
+        catch (_) { return 'equifax'; }
+    }
+    let crcBureauPriority = loadBureauPriority();
     function clampPanelOpacity(value) {
         const n = Number(value);
         return Number.isFinite(n) ? Math.max(60, Math.min(100, Math.round(n))) : 100;
@@ -2350,6 +2365,62 @@ Controls padding, font, spacing, and appearance for all 3
         return '';
     }
 
+    // Capture all populated row values for every negatively reporting bureau,
+    // regardless of the preferred bureau used by the ordinary Negative view.
+    function collectNegativeBureauFields(rows, reportingBureaus) {
+        const result = {};
+        CRC_BUREAUS.forEach(bureau => {
+            if (!reportingBureaus.some(name => name.toLowerCase() === bureau.field)) return;
+            const fields = {};
+            Object.values(rows).forEach(row => {
+                const labelCell = row.querySelector('[data-field="label"]');
+                const label = String(labelCell?.textContent || '').replace(/:\s*$/, '').trim();
+                const valueCell = row.querySelector('[data-field="' + bureau.field + '"]');
+                const value = String(valueCell?.textContent || '').trim();
+                if (!label || !value || value === '-' || value === '--') return;
+                const prior = fields[label];
+                fields[label] = prior && prior !== value ? prior + ' | ' + value : value;
+            });
+            result[bureau.code] = fields;
+        });
+        return result;
+    }
+    // Combine matching values, retaining all corresponding bureau labels.
+    function groupBureauFieldValues(bureauFields, fieldNames, kind = 'text') {
+        const groups = new Map();
+        for (const bureau of CRC_BUREAUS) {
+            const fields = bureauFields?.[bureau.code] || {};
+            const entry = Object.entries(fields).find(([label]) =>
+                fieldNames.some(name => label.trim().toLowerCase() === name.toLowerCase()));
+            if (!entry) continue;
+            const value = String(entry[1] || '').trim();
+            if (!value || value === '-' || value === '--') continue;
+            let key = value.replace(/\s+/g, ' ').toUpperCase();
+            if (kind === 'balance' && /^\(?-?\$?\s*[\d,]+(?:\.\d{1,2})?\)?$/.test(value)) {
+                const negative = /-/.test(value) || (value.startsWith('(') && value.endsWith(')'));
+                const number = Number(value.replace(/[^\d.]/g, ''));
+                if (Number.isFinite(number)) key = 'amount:' + (negative ? -number : number).toFixed(2);
+            }
+            if (!groups.has(key)) groups.set(key, { value, bureaus: [] });
+            groups.get(key).bureaus.push(bureau.code);
+        }
+        return [...groups.values()];
+    }
+    function formatBureauValueLines(groups) {
+        return groups.map(entry => entry.value + '(' + entry.bureaus.join('-') + ')');
+    }
+    function getDisputeCategory(accountType) {
+        const type = String(accountType || '').toUpperCase();
+        if (/BANKRUPTCY|CHAPTER/.test(type)) return 'bankruptcy';
+        if (/COLLECTION|CHARGE OFF|REPOSSESS|TRANSFERRED|FORECLOSURE/.test(type)) return 'delete';
+        // Include OPEN, CLOSED, PAID and unclassified negative items in Updated.
+        return 'updated';
+    }
+    function sortDisputeItems(items) {
+        return [...items].sort((a,b) => String(a.account || '').localeCompare(String(b.account || ''),
+            undefined, { sensitivity: 'base', numeric: true }));
+    }
+
     function extractData() {
         let output = [];
         let grids = document.querySelectorAll('.MuiDataGrid-root');
@@ -2425,7 +2496,7 @@ Controls padding, font, spacing, and appearance for all 3
             }
 
             function getPriorityRowValue(label) {
-                const priority = ["equifax", "experian", "transunion"];
+                const priority = getBureauPriorityOrder(crcBureauPriority);
                 for (const bureau of priority) {
                     let isNegative = bureaus.map(b => b.toLowerCase()).includes(bureau);
                     if (!isNegative) continue;
@@ -2438,7 +2509,7 @@ Controls padding, font, spacing, and appearance for all 3
             }
 
             function getPriorityValue(label) {
-                const priority = ["equifax", "experian", "transunion"];
+                const priority = getBureauPriorityOrder(crcBureauPriority);
                 let rows = grid.querySelectorAll('.MuiDataGrid-row');
 
                 for (const bureau of priority) {
@@ -2474,7 +2545,7 @@ Controls padding, font, spacing, and appearance for all 3
                     }
                 });
 
-                const priority = ["equifax", "experian", "transunion"];
+                const priority = getBureauPriorityOrder(crcBureauPriority);
                 for (const bureau of priority) {
                     if (!bureaus.map(b => b.toLowerCase()).includes(bureau)) continue;
                     for (let row of matchingRows) {
@@ -2527,6 +2598,7 @@ Controls padding, font, spacing, and appearance for all 3
 
             output.push({
                 account: accountName,
+                bureau_fields: collectNegativeBureauFields(rows, bureaus),
                 account_number: accountNumber,
                 bureau_display: bureauDisplay.trim(),
                 balance: balance,
