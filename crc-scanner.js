@@ -3972,12 +3972,12 @@ function extractInquiries() {
             aliasGroups.replaceChildren();
             aliasSelect.replaceChildren();
             put(aliasSelect,make('option','','Choose creditor…')).value='';
-            if (typeof aliasGroupsSorted !== 'function') return;
             const query=aliasSearch.value.toLowerCase().trim();
-            for (const group of aliasGroupsSorted()) {
+            const groups=[...CREDITOR_ALIAS_GROUPS].sort((a,b)=>
+                CREDITOR_DISPLAY_NAMES[a.id].localeCompare(CREDITOR_DISPLAY_NAMES[b.id]));
+            for (const group of groups) {
                 const title=CREDITOR_DISPLAY_NAMES[group.id] || group.id;
-                const variants=getCreditorVariants(group.id);
-                const variations=variants.map(x=>typeof x==='string'?x:x.alias);
+                const variations=listCreditorAliases(group.id).map(x=>x.alias);
                 const option=put(aliasSelect,make('option','',title));
                 option.value=group.id;
                 if (query && !title.toLowerCase().includes(query) &&
