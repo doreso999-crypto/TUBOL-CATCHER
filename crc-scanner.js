@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.9
+// @version      5.0
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -22,6 +22,7 @@
     const CRC_INQUIRY_BEFORE_DATE_KEY = 'tubol-crc-inquiry-before-date';
     const CRC_PANEL_OPACITY_KEY = 'tubol-crc-panel-opacity';
     const CRC_PANEL_POSITION_KEY = 'tubol-crc-panel-position-v1';
+    const CRC_PREVIEW_LAYOUT_KEY = 'tubol-crc-preview-layout-v1';
     const CRC_BUREAU_PRIORITY_KEY = 'tubol-crc-negative-bureau-priority';
     const CRC_BUREAUS = [
         { field: 'experian', label: 'Experian', code: 'exp' },
@@ -1768,6 +1769,111 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
     .crc-preview-page .crc-open-account { margin-bottom:12px; }
     .crc-preview-tab { padding:10px 12px; font-size:12px; }
 }
+
+/* Full-page workspace: view toolbar, data table, settings drawer. */
+.crc-preview-toolbar {
+    display:flex; align-items:center; justify-content:space-between; gap:12px;
+    flex-wrap:wrap; margin:0 0 16px;
+}
+.crc-preview-subnav[hidden] { display:none !important; }
+.crc-preview-layout-control { display:inline-flex; gap:3px; padding:4px;
+    background:#252a30; border:1px solid #464e59; border-radius:11px; }
+.crc-preview-layout-btn { border:0; border-radius:7px; background:transparent;
+    color:#abb8c6; font-size:13px; font-weight:750; cursor:pointer;
+    padding:9px 14px; }
+.crc-preview-layout-btn.active { color:#fff; background:#40536c; }
+.crc-preview-layout-btn:focus-visible, .crc-preview-settings-btn:focus-visible,
+.crc-preview-dialog button:focus-visible, .crc-preview-dialog input:focus-visible,
+.crc-preview-dialog select:focus-visible { outline:2px solid #9ac3ff; outline-offset:2px; }
+.crc-preview-search { flex:1; max-width:300px; min-width:155px; min-height:40px;
+    border:1px solid #515b66; border-radius:8px; background:#252a30; color:#fff;
+    padding:9px 12px; font:inherit; font-size:13px; }
+.crc-preview-settings-btn { padding:11px 15px; border:1px solid #596575;
+    border-radius:9px; background:#2d3540; color:#e8eef6; font-weight:700;
+    font-size:14px; cursor:pointer; }
+.crc-preview-settings-btn:hover { background:#3b4858; }
+.crc-preview-table-wrap { max-width:100%; overflow:auto; background:#22262b;
+    border:1px solid #3c444e; border-radius:11px; margin:4px 0 15px; }
+.crc-preview-table { width:100%; border-collapse:collapse; text-align:left; font-size:14px; }
+.crc-preview-table th { position:sticky; top:0; z-index:1; background:#303741;
+    color:#d8e1ec; font-weight:750; font-size:12px; letter-spacing:.02em; }
+.crc-preview-table th, .crc-preview-table td {
+    border-bottom:1px solid #3c454f; padding:13px 15px;
+    vertical-align:top; white-space:pre-line; overflow-wrap:anywhere;
+}
+.crc-preview-table tbody tr:hover { background:#303841; }
+.crc-preview-table tbody tr:last-child td { border-bottom:0; }
+.crc-preview-table td:first-child { color:#f3f6fa; font-weight:700; min-width:165px; }
+.crc-preview-table td { font-variant-numeric:tabular-nums; }
+.crc-preview-empty { padding:26px; color:#b3c0cf; text-align:center; font-size:14px; }
+.crc-preview-page[data-crc-layout="grid"] #crc-results {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr)); gap:14px;
+}
+.crc-preview-page[data-crc-layout="grid"] #crc-dispute-results {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,330px),1fr)); gap:14px;
+}
+.crc-preview-page[data-crc-layout="grid"] .crc-open-accounts-view {
+    display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr)); gap:12px;
+}
+.crc-preview-page[data-crc-layout="list"] #crc-results,
+.crc-preview-page[data-crc-layout="list"] #crc-dispute-results,
+.crc-preview-page[data-crc-layout="list"] .crc-open-accounts-view {
+    display:flex; flex-direction:column; gap:8px; padding:2px 0;
+}
+.crc-preview-page[data-crc-layout="list"] #crc-results > div,
+.crc-preview-page[data-crc-layout="list"] .crc-dispute-card,
+.crc-preview-page[data-crc-layout="list"] .crc-open-account {
+    margin:0; padding:12px 16px; width:100%;
+}
+.crc-preview-page[data-crc-layout="list"] .crc-inquiry-row,
+.crc-preview-page[data-crc-layout="list"] .crc-previous-address-card {
+    margin-bottom:4px; padding:9px 12px;
+}
+.crc-preview-dimmer[hidden], .crc-preview-settings[hidden] { display:none !important; }
+.crc-preview-dimmer { position:fixed; inset:0; z-index:100;
+    background:rgba(0,0,0,.65); }
+.crc-preview-settings { position:fixed; z-index:101; top:0; right:0; height:100dvh;
+    width:min(520px,100vw); background:#23272d; border-left:1px solid #4d5765;
+    box-shadow:-20px 0 55px rgba(0,0,0,.55); display:flex; flex-direction:column;
+    padding:22px; font-size:15px; }
+.crc-preview-settings-head { display:flex; gap:12px; justify-content:space-between;
+    align-items:center; border-bottom:1px solid #48505b; padding-bottom:15px; }
+.crc-preview-settings-head h2 { margin:0; font-size:23px; color:#f0f3f8; }
+.crc-preview-settings-close { border:0; background:transparent; color:#ebeff5;
+    cursor:pointer; font-size:26px; padding:5px 10px; }
+.crc-preview-settings-scroll { min-height:0; overflow:auto; padding:10px 2px 20px; }
+.crc-preview-settings-scroll h3 { color:#ddeafa; margin:21px 0 9px; font-size:15px; }
+.crc-preview-settings-scroll label { display:block; margin:12px 0 7px;
+    color:#d8e0eb; font-size:14px; font-weight:700; }
+.crc-preview-settings-scroll input[type="checkbox"] { margin:0 8px 0 0; accent-color:#3982e4; }
+.crc-preview-settings-scroll .crc-preview-check { display:flex; align-items:center; gap:4px;
+    font-weight:500; line-height:1.5; }
+.crc-preview-settings-scroll select,.crc-preview-settings-scroll input[type="date"],
+.crc-preview-settings-scroll input[type="search"], .crc-preview-settings-scroll input[type="text"] {
+    width:100%; min-height:42px; background:#181c22; border:1px solid #69727e;
+    border-radius:8px; padding:9px 12px; color:#f3f6fa; font-size:14px; color-scheme:dark;
+}
+.crc-preview-settings-scroll input[type="range"] { width:100%; accent-color:#3982e4; }
+.crc-preview-setting-note { font-size:12px; line-height:1.5; color:#a7b5c6; margin:8px 0; }
+.crc-preview-setting-actions { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+.crc-preview-setting-actions button { background:#365275; color:#fff; border:1px solid #5676a1;
+    border-radius:8px; padding:9px 13px; cursor:pointer; font-size:13px; font-weight:700; }
+.crc-preview-setting-actions button.secondary { background:#353b44; border-color:#56616d; }
+.crc-preview-alias-groups { max-height:230px; overflow:auto; border:1px solid #4c555f;
+    border-radius:8px; padding:6px; margin-top:9px; }
+.crc-preview-alias-groups details { padding:8px; border-bottom:1px solid #424b55; }
+.crc-preview-alias-groups summary { cursor:pointer; font-weight:700; }
+.crc-preview-alias-groups button { background:transparent; border:0; color:#bdd4ef;
+    padding:5px 7px; cursor:pointer; }
+.crc-preview-table details { min-width:130px; }
+.crc-preview-table details summary { color:#a9c7ec; cursor:pointer; }
+@media (max-width:720px) {
+    .crc-preview-toolbar { flex-direction:column; align-items:stretch; }
+    .crc-preview-layout-control { justify-content:center; }
+    .crc-preview-search { max-width:none; width:100%; }
+    .crc-preview-settings { padding:17px; }
+}
+
 `;
 
     const HTML_TEMPLATE = `
@@ -3702,6 +3808,18 @@ function extractInquiries() {
             return node;
         }
 
+        // Full-page controls start from the extractor's saved preferences.
+        // Only preferences (never report values) are written to localStorage.
+        const previewSettings = Object.assign({
+            bureauPriority: 'equifax',
+            displayMode: 'modern',
+            copyConnected: false,
+            copyConnectedNew: true,
+            openNamesOnly: false,
+            beforeDate: snapshot.beforeDate || '',
+            opacity: 100
+        }, snapshot.settings || {});
+
         const root = put(doc.body, make('div', 'crc-preview-page'));
         root.id = 'crc-negative-panel';
         const layout = put(root, make('main', 'crc-preview-layout'));
@@ -3714,6 +3832,223 @@ function extractInquiries() {
         const copyButton = put(put(header, make('div', 'crc-preview-actions')),
             make('button', 'crc-preview-copy', 'Copy current view'));
         copyButton.type = 'button';
+
+        const toolbar = put(layout, make('div','crc-preview-toolbar'));
+        const layoutControl = put(toolbar,make('div','crc-preview-layout-control'));
+        layoutControl.setAttribute('role','group');
+        layoutControl.setAttribute('aria-label','Report layout');
+        const layoutButtons = new Map();
+        let displayLayout = 'grid';
+        try {
+            const storedLayout = localStorage.getItem(CRC_PREVIEW_LAYOUT_KEY);
+            if (['grid','table','list'].includes(storedLayout)) displayLayout = storedLayout;
+        } catch (_) { /* Default to grid. */ }
+        ['grid','table','list'].forEach(name => {
+            const label = name.charAt(0).toUpperCase()+name.slice(1);
+            const button = put(layoutControl,make('button','crc-preview-layout-btn',label));
+            button.type='button';
+            button.setAttribute('aria-pressed',String(name===displayLayout));
+            button.addEventListener('click',()=>setDisplayLayout(name));
+            layoutButtons.set(name,button);
+        });
+        const settingsOpenButton = put(toolbar,make('button','crc-preview-settings-btn','Settings'));
+        settingsOpenButton.type='button';
+        settingsOpenButton.setAttribute('aria-haspopup','dialog');
+        settingsOpenButton.setAttribute('aria-expanded','false');
+
+        // Working Settings drawer for the full-page workspace. These
+        // controls use the same preferences as the extractor and update it
+        // immediately through the opener callback when available.
+        const dimmer = put(doc.body,make('div','crc-preview-dimmer'));
+        dimmer.hidden=true;
+        const settingsDrawer = put(doc.body,make('aside','crc-preview-settings crc-preview-dialog'));
+        settingsDrawer.hidden=true;
+        settingsDrawer.setAttribute('role','dialog');
+        settingsDrawer.setAttribute('aria-modal','true');
+        settingsDrawer.setAttribute('aria-label','Full-page report settings');
+        const settingsHead=put(settingsDrawer,make('div','crc-preview-settings-head'));
+        put(settingsHead,make('h2','','Report settings'));
+        const settingsClose=put(settingsHead,make('button','crc-preview-settings-close','×'));
+        settingsClose.type='button';
+        settingsClose.setAttribute('aria-label','Close Settings');
+        const settingsBody=put(settingsDrawer,make('div','crc-preview-settings-scroll'));
+        const preferenceControls={};
+        function addSettingsHeading(value) {put(settingsBody,make('h3','',value));}
+        function addSelect(key,label,choices,description) {
+            const text=put(settingsBody,make('label','',label));
+            const input=put(settingsBody,make('select'));
+            const id='crc-preview-pref-'+key;
+            text.setAttribute('for',id);input.id=id;
+            choices.forEach(([value,name])=>{
+                const opt=put(input,make('option','',name));
+                opt.value=value;
+            });
+            input.value=String(previewSettings[key]);
+            input.addEventListener('change',()=>applySetting(key,input.value));
+            preferenceControls[key]=input;
+            if(description) put(settingsBody,make('p','crc-preview-setting-note',description));
+        }
+        function addCheckbox(key,label) {
+            const row=put(settingsBody,make('label','crc-preview-check'));
+            const input=put(row,make('input'));input.type='checkbox';
+            input.checked=Boolean(previewSettings[key]);
+            put(row,make('span','',label));
+            input.addEventListener('change',()=>applySetting(key,input.checked));
+            preferenceControls[key]=input;
+        }
+        addSettingsHeading('Appearance');
+        addSelect('bureauPriority','Preferred bureau for regular Negative view',[
+            ['equifax','Equifax first'],['experian','Experian first'],
+            ['transunion','TransUnion first']
+        ],'Disputed Mode always shows all bureaus, regardless of priority.');
+        addSelect('displayMode','Display format',[
+            ['modern','Modern — uppercase and bureau labels'],
+            ['legacy','Legacy — grouped original names']
+        ]);
+        const opacityLabel=put(settingsBody,make('label','', 'Report opacity'));
+        const opacityInput=put(settingsBody,make('input'));
+        opacityInput.type='range';opacityInput.min='60';opacityInput.max='100';
+        opacityInput.step='1';opacityInput.value=String(previewSettings.opacity);
+        const opacityText=put(settingsBody,make('p','crc-preview-setting-note',
+            previewSettings.opacity+'%'));
+        opacityInput.addEventListener('input',()=>{
+            opacityText.textContent=opacityInput.value+'%';
+            applySetting('opacity',Number(opacityInput.value));
+        });
+        preferenceControls.opacity=opacityInput;
+        addSettingsHeading('Inquiries & open accounts');
+        addCheckbox('copyConnected','Copy inquiries connected to open accounts');
+        addCheckbox('copyConnectedNew','Copy connected NEW inquiries');
+        addCheckbox('openNamesOnly','Show and copy open-account names only');
+        const dateLabel=put(settingsBody,make('label','','Show regular inquiries BEFORE'));
+        const dateInput=put(settingsBody,make('input'));dateInput.type='date';
+        dateInput.id='crc-preview-date-cutoff';dateLabel.setAttribute('for',dateInput.id);
+        dateInput.value=previewSettings.beforeDate||'';
+        preferenceControls.beforeDate=dateInput;
+        put(settingsBody,make('p','crc-preview-setting-note',
+            'Exclusive cutoff: Jan 1, 2025 shows Dec 2024 and older. NEW is unaffected.'));
+        const dateActions=put(settingsBody,make('div','crc-preview-setting-actions'));
+        const applyDate=put(dateActions,make('button','','Apply date'));
+        applyDate.type='button';
+        applyDate.addEventListener('click',()=>applySetting('beforeDate',dateInput.value));
+        const clearDate=put(dateActions,make('button','secondary','Show all'));
+        clearDate.type='button';
+        clearDate.addEventListener('click',()=>{
+            dateInput.value='';applySetting('beforeDate','');
+        });
+        addSettingsHeading('Creditor aliases');
+        put(settingsBody,make('p','crc-preview-setting-note',
+            'Manage creditor aliases used to flag possible inquiry matches. Changes are saved in the same browser as the original extractor.'));
+        const aliasSearch=put(settingsBody,make('input'));
+        aliasSearch.type='search';aliasSearch.placeholder='Search creditors or aliases';
+        aliasSearch.setAttribute('aria-label','Find creditor aliases');
+        const aliasGroups=put(settingsBody,make('div','crc-preview-alias-groups'));
+        const aliasActions=put(settingsBody,make('div','crc-preview-setting-actions'));
+        const resetAliases=put(aliasActions,make('button','secondary','Restore default aliases'));
+        resetAliases.type='button';
+        const aliasNameLabel=put(settingsBody,make('label','','Creditor alias to assign'));
+        const aliasName=put(settingsBody,make('input'));
+        aliasName.type='text';aliasName.placeholder='Creditor name as shown on report';
+        const aliasSelectLabel=put(settingsBody,make('label','','Assign to existing creditor'));
+        const aliasSelect=put(settingsBody,make('select'));
+        const aliasNewLabel=put(settingsBody,make('label','','Or create a new creditor'));
+        const aliasNewName=put(settingsBody,make('input'));
+        aliasNewName.type='text';aliasNewName.placeholder='New creditor display name';
+        const aliasSaveActions=put(settingsBody,make('div','crc-preview-setting-actions'));
+        const aliasSave=put(aliasSaveActions,make('button','','Save alias / creditor'));
+        aliasSave.type='button';
+        const aliasFeedback=put(settingsBody,make('p','crc-preview-setting-note',''));
+        function notifyAliasChanged() {
+            snapshot.onAliasChanged?.();
+            if (Array.isArray(snapshot.inquiries) && snapshot.openAccountsByBureau) {
+                snapshot.inquiries.forEach(item=>{
+                    item.connectedToOpen=isInquiryConnectedToOpenAccount(
+                        item.creditor,item.bureauKey,snapshot.openAccountsByBureau);
+                });
+            }
+            renderAliasGroups();
+            refreshPreviewContent();
+        }
+        function renderAliasGroups() {
+            aliasGroups.replaceChildren();
+            aliasSelect.replaceChildren();
+            put(aliasSelect,make('option','','Choose creditor…')).value='';
+            const query=aliasSearch.value.toLowerCase().trim();
+            const groups=[...CREDITOR_ALIAS_GROUPS].sort((a,b)=>
+                CREDITOR_DISPLAY_NAMES[a.id].localeCompare(CREDITOR_DISPLAY_NAMES[b.id]));
+            for (const group of groups) {
+                const title=CREDITOR_DISPLAY_NAMES[group.id] || group.id;
+                const variations=listCreditorAliases(group.id).map(x=>x.alias);
+                const option=put(aliasSelect,make('option','',title));
+                option.value=group.id;
+                if (query && !title.toLowerCase().includes(query) &&
+                    !variations.some(n=>n.toLowerCase().includes(query))) continue;
+                const details=put(aliasGroups,make('details'));
+                const summary=put(details,make('summary','',title+' ('+variations.length+')'));
+                if (CREDITOR_USER_GROUPS.some(custom=>custom.id===group.id)) {
+                    const deleteGroup=put(details,make('button','','Delete custom creditor'));
+                    deleteGroup.type='button';
+                    deleteGroup.addEventListener('click',()=>{
+                        if (!previewWindow.confirm('Delete custom creditor "'+title+'" and its variations?')) return;
+                        const result=deleteUserCreditorGroup(group.id);
+                        aliasFeedback.textContent=result.message;
+                        if (result.ok) notifyAliasChanged();
+                    });
+                }
+                variations.forEach(variant=>{
+                    const row=put(details,make('div',''));
+                    row.style.display='flex';row.style.justifyContent='space-between';
+                    put(row,make('span','',variant));
+                    const remove=put(row,make('button','','Remove'));
+                    remove.type='button';remove.setAttribute('aria-label','Remove alias '+variant);
+                    remove.addEventListener('click',()=>{
+                        if (!previewWindow.confirm('Remove alias "'+variant+'"?')) return;
+                        const result=deleteCreditorAlias(variant,group.id);
+                        aliasFeedback.textContent=result.message;
+                        if(result.ok)notifyAliasChanged();
+                    });
+                });
+            }
+        }
+        aliasSearch.addEventListener('input',renderAliasGroups);
+        resetAliases.addEventListener('click',()=>{
+            if(!previewWindow.confirm('Remove all custom aliases and restore defaults?'))return;
+            const result=resetCreditorAliases();
+            aliasFeedback.textContent=result.message;
+            if(result.ok)notifyAliasChanged();
+        });
+        aliasSave.addEventListener('click',()=>{
+            const alias=aliasName.value.trim();
+            const newName=aliasNewName.value.trim();
+            const result=newName?createCreditorGroup(newName,alias):
+                alias?addCreditorAlias(alias,aliasSelect.value):
+                {ok:false,message:'Enter a creditor alias or a new creditor name.'};
+            aliasFeedback.textContent=result.message;
+            if(result.ok){
+                aliasName.value='';aliasNewName.value='';
+                notifyAliasChanged();
+            }
+        });
+        function setSettingsVisible(open) {
+            dimmer.hidden=!open;
+            settingsDrawer.hidden=!open;
+            settingsOpenButton.setAttribute('aria-expanded',String(open));
+            if (open) renderAliasGroups();
+        }
+        settingsOpenButton.addEventListener('click',()=>setSettingsVisible(settingsDrawer.hidden));
+        settingsClose.addEventListener('click',()=>setSettingsVisible(false));
+        dimmer.addEventListener('click',()=>setSettingsVisible(false));
+        doc.addEventListener('keydown',event=>{
+            if(event.key==='Escape' && !settingsDrawer.hidden) setSettingsVisible(false);
+        });
+        function applySetting(key,value) {
+            previewSettings[key]=value;
+            if(key==='opacity') root.style.opacity=String(Number(value)/100);
+            try { snapshot.onSettingChange?.(key,value); }
+            catch (err) { console.warn('Source extractor settings unavailable',err); }
+            refreshPreviewContent();
+        }
+        root.style.opacity=String(Number(previewSettings.opacity)/100);
 
         const nav = put(layout, make('nav', 'crc-preview-nav'));
         nav.setAttribute('aria-label', 'Report sections');
@@ -3734,6 +4069,12 @@ function extractInquiries() {
             pages[name].setAttribute('role', 'tabpanel');
             mainTabs.set(name, makeTab(nav, pageLabels[name], () => selectPage(name)));
         });
+        const tableModeNav = put(layout,make('nav','crc-preview-subnav'));
+        tableModeNav.hidden=true;
+        tableModeNav.setAttribute('aria-label','Table section filters');
+        const tablePane = makePane(layout,'crc-preview-table-pane');
+        const tableHost = put(tablePane,make('div','crc-preview-table-wrap'));
+
 
         // NEGATIVE: the same normal display plus all three Disputed Mode
         // categories, which are built from full bureau data on demand.
@@ -3748,7 +4089,7 @@ function extractInquiries() {
         negativeTabs.set('disputed', makeTab(negativeTabsNav,'Disputed Mode',()=>selectNegativeMode('disputed')));
         addIntro(negativePanes.standard,
             'Preferred-bureau summary from the extractor. Use Settings in the original tab to change priority.');
-        cloneList(snapshot.negativeResults, negativePanes.standard);
+        const standardList=cloneList(snapshot.negativeResults, negativePanes.standard);
 
         const disputeNav = put(negativePanes.disputed, make('div', 'crc-preview-subnav'));
         disputeNav.setAttribute('role','tablist');
@@ -3766,6 +4107,10 @@ function extractInquiries() {
         function selectDisputedCategory(name) {
             disputedCategory = name;
             markSelected(disputeButtons, name);
+            if (displayLayout === 'table' && activePage === 'negative') {
+                renderTableSubnav();
+                renderPreviewTable();
+            }
             disputeContent.replaceChildren();
             const items = snapshot.disputeCategories[name] || [];
             if (!items.length) {
@@ -3781,6 +4126,10 @@ function extractInquiries() {
             markSelected(negativeTabs,name);
             for (const [key,pane] of Object.entries(negativePanes)) pane.hidden = key !== name;
             if (name === 'disputed') selectDisputedCategory(disputedCategory);
+            if (displayLayout === 'table' && activePage === 'negative') {
+                renderTableSubnav();
+                renderPreviewTable();
+            }
         }
 
         // INQUIRIES: separate regular, open-account and new lists. Filters and
@@ -3800,43 +4149,351 @@ function extractInquiries() {
             : 'Showing all extracted inquiries.';
         addIntro(inquiryPanes.inquiries,
             dateNote + ' Change the date filter in the original extractor and reopen this preview to refresh.');
-        cloneList(snapshot.inquiriesView,inquiryPanes.inquiries);
+        const regularList=cloneList(snapshot.inquiriesView,inquiryPanes.inquiries);
         addIntro(inquiryPanes.open,'All open accounts from the extracted report.');
-        cloneList(snapshot.openAccountsView,inquiryPanes.open);
+        const openList=cloneList(snapshot.openAccountsView,inquiryPanes.open);
         addIntro(inquiryPanes.new,'Recent inquiries (last 35 days) from the extracted report.');
-        cloneList(snapshot.newInquiriesView,inquiryPanes.new);
+        const newList=cloneList(snapshot.newInquiriesView,inquiryPanes.new);
         inquiryTabs.set('inquiries',makeTab(inquiryNav,'Inquiries',()=>selectInquiryMode('inquiries')));
         inquiryTabs.set('open',makeTab(inquiryNav,'Open accounts',()=>selectInquiryMode('open')));
         inquiryTabs.set('new',makeTab(inquiryNav,'New inquiries',()=>selectInquiryMode('new')));
         function selectInquiryMode(name) {
             inquiryMode = name;
             markSelected(inquiryTabs,name);
+            if (displayLayout === 'table' && activePage === 'inquiries') {
+                renderTableSubnav();
+                renderPreviewTable();
+            }
             Object.entries(inquiryPanes).forEach(([key,pane]) => { pane.hidden = key !== name; });
         }
 
         // PERSONAL INFO: retain bureau-grouped previous addresses and employers.
         const personalAddresses = put(pages.personal,make('section','crc-personal-section'));
         put(personalAddresses,make('h2','crc-personal-heading','PREVIOUS ADDRESSES'));
-        cloneList(snapshot.addressesView,personalAddresses);
+        const addressesList=cloneList(snapshot.addressesView,personalAddresses);
         const personalEmployers = put(pages.personal,make('section','crc-personal-section'));
         put(personalEmployers,make('h2','crc-personal-heading','EMPLOYERS'));
-        cloneList(snapshot.employersView,personalEmployers);
+        const employersList=cloneList(snapshot.employersView,personalEmployers);
 
         put(layout,make('footer','crc-preview-footer',
             'Private, local snapshot. This tab does not automatically refresh; reopen it from TUBOL CATCHER after rescanning or changing settings. No report values are placed in browser storage or sent to a server by the preview.'));
 
+        // Render the report arrays directly, so settings really change this
+        // workspace (not just the original floating panel). Older callers
+        // without the arrays keep the original cloned snapshot.
+        function fillPreviewNegative() {
+            if (!Array.isArray(snapshot.negativeData)) return;
+            updateNegativePreferredValues(snapshot.negativeData,previewSettings.bureauPriority);
+            standardList.replaceChildren();
+            for (const item of snapshot.bankruptcies||[]) {
+                const card=put(standardList,make('div'));
+                put(card,make('b','','Bankruptcy'));
+                [item.reference,item.date,item.status].forEach(x=>put(card,make('div','',String(x||''))));
+            }
+            for (const item of snapshot.negativeData) {
+                const card=put(standardList,make('div'));
+                put(card,make('b','',item.account||'(No creditor)'));
+                put(card,make('div','',item.account_number||''));
+                put(card,make('div','',item.balance||''));
+                put(card,make('div','',String(item.bureau_display||'')+' '+String(item.account_type||'')));
+                if (item.warning) put(card,make('div','crc-dispute-type',item.warning));
+            }
+        }
+        function previewInquiryItems(mode) {
+            if (!Array.isArray(snapshot.inquiries)) return null;
+            return mode==='new' ? (snapshot.newInquiries||[])
+                : filterInquiriesBeforeDate(snapshot.inquiries,previewSettings.beforeDate);
+        }
+        function openAliasFromPreview(value) {
+            aliasName.value=String(value||'').trim();
+            setSettingsVisible(true);
+            aliasName.focus();
+        }
+        function fillPreviewInquiries(container,mode) {
+            const items=previewInquiryItems(mode);
+            if (!items) return;
+            container.replaceChildren();
+            const modern=previewSettings.displayMode==='modern';
+            for(const bureau of [{name:'Experian',key:'experian',code:'EXP'},
+                                  {name:'Equifax',key:'equifax',code:'EQU'},
+                                  {name:'TransUnion',key:'transunion',code:'TU'}]) {
+                const subset=items.filter(item=>item[bureau.key]);
+                const section=put(container,make('div','crc-inquiry-section'));
+                const heading=put(section,make('div','crc-inquiry-bureau',bureau.name+' ('+subset.length+')'));
+                heading.setAttribute('role','button');heading.setAttribute('tabindex','0');
+                heading.setAttribute('aria-expanded','true');
+                const list=put(section,make('div','crc-inquiry-items'));
+                const toggle=()=>{
+                    const collapsed=section.classList.toggle('crc-collapsed');
+                    heading.setAttribute('aria-expanded',String(!collapsed));
+                };
+                heading.addEventListener('click',toggle);
+                heading.addEventListener('keydown',event=>{
+                    if(event.key==='Enter'||event.key===' ') {event.preventDefault();toggle();}
+                });
+                if(!subset.length) put(list,make('div','crc-inquiry-none','No inquiries'));
+                for(const item of subset) {
+                    const connected=Boolean(item.connectedToOpen);
+                    const row=put(list,make('div','crc-inquiry-row '+(connected?'crc-inq-connected':'crc-inq-unconnected')));
+                    const top=put(row,make('div','crc-inquiry-top-row'));
+                    const name=String(item.creditor||'(No creditor)').trim();
+                    put(top,make('div','crc-inquiry-creditor',modern?
+                        '- '+name.toUpperCase()+(item.date?' '+item.date:'')+'('+bureau.code+')':name));
+                    put(top,make('div','crc-inquiry-status',
+                        /already disputed/i.test(item.action||'')?'AD':'ND'));
+                    if(!modern) put(row,make('div','crc-inquiry-date',item.date||''));
+                    row.title='Right-click to manage creditor alias';
+                    row.addEventListener('contextmenu',event=>{
+                        event.preventDefault();openAliasFromPreview(name);
+                    });
+                }
+            }
+        }
+        function fillPreviewOpen() {
+            if (!Array.isArray(snapshot.openAccounts)) return;
+            openList.replaceChildren();
+            for(const item of snapshot.openAccounts) {
+                const card=put(openList,make('div','crc-open-account'));
+                put(card,make('b','',item.account||'(No creditor)'));
+                if (!previewSettings.openNamesOnly) {
+                    put(card,make('div','',item.account_number||''));
+                    put(card,make('div','',item.balance||''));
+                    put(card,make('div','',(item.bureau_display||'')+' '+(item.account_type||'')));
+                }
+                card.addEventListener('contextmenu',event=>{
+                    event.preventDefault();openAliasFromPreview(item.account);
+                });
+            }
+            if (!snapshot.openAccounts.length)
+                put(openList,make('div','crc-dispute-empty','No open accounts'));
+        }
+        function fillPreviewPersonal(container,groups,empty) {
+            if (!groups) return;
+            container.replaceChildren();
+            for (const bureau of [{name:'Experian',key:'EX',code:'EXP'},
+                                  {name:'Equifax',key:'EQU',code:'EQU'},
+                                  {name:'TransUnion',key:'TU',code:'TU'}]) {
+                const items=groups[bureau.key]||[];
+                const section=put(container,make('div','crc-inquiry-section'));
+                put(section,make('div','crc-inquiry-bureau',bureau.name+' ('+items.length+')'));
+                const list=put(section,make('div','crc-inquiry-items'));
+                if (!items.length) put(list,make('div','crc-inquiry-none','No '+empty));
+                for (const item of items) {
+                    const name=String(item.address||'').trim();
+                    const date=String(item.date||'').trim();
+                    const text=previewSettings.displayMode==='modern'
+                        ? '- '+name.toUpperCase()+(date?' '+date:'')+'('+bureau.code+')'
+                        : name+(date?' '+date:'');
+                    put(list,make('div','crc-previous-address-card',text));
+                }
+            }
+        }
+        function refreshPreviewContent() {
+            fillPreviewNegative();
+            fillPreviewInquiries(regularList,'inquiries');
+            fillPreviewInquiries(newList,'new');
+            fillPreviewOpen();
+            fillPreviewPersonal(addressesList,snapshot.previousAddresses,'previous addresses');
+            fillPreviewPersonal(employersList,snapshot.employers,'employers');
+            const description=inquiryPanes.inquiries.querySelector('.crc-preview-intro');
+            if (description) description.textContent=previewSettings.beforeDate
+                ? 'Showing inquiries strictly before '+previewSettings.beforeDate+'. NEW remains independent.'
+                : 'Showing all extracted inquiries.';
+            if (displayLayout==='table') renderPreviewTable();
+        }
+        function previewInquiryCopy(items,includeConnected) {
+            if (!items) return '';
+            let result='';
+            const modern=previewSettings.displayMode==='modern';
+            for (const bureau of [{name:'Experian',key:'experian',code:'EXP'},
+                {name:'Equifax',key:'equifax',code:'EQU'},
+                {name:'TransUnion',key:'transunion',code:'TU'}]) {
+                const filtered=items.filter(x=>x[bureau.key]&&(includeConnected||!x.connectedToOpen));
+                if (!modern) {
+                    result+=bureau.name.toUpperCase()+':\n\n';
+                    if(!filtered.length) result+=(includeConnected?'(No inquiries)':'(No unconnected inquiries)')+'\n\n';
+                    else result+=filtered.map(item=>'- '+String(item.creditor||'(No creditor)').toLowerCase()+
+                        ' '+(item.date||'')).join('\n')+'\n\n';
+                } else {
+                    result+=filtered.map(item=>'- '+String(item.creditor||'(No creditor)').toUpperCase()+
+                        (item.date?' '+item.date:'')+'('+bureau.code+')').join('\n');
+                    if (filtered.length) result+='\n';
+                }
+            }
+            return result.trim();
+        }
+        function previewPersonalCopy() {
+            if (!snapshot.previousAddresses || !snapshot.employers) return snapshot.copyPersonalInfo;
+            const modern=previewSettings.displayMode==='modern';
+            function format(groups) {
+                let lines=[];
+                for(const bureau of [{name:'Experian',key:'EX',code:'EXP'},
+                                    {name:'Equifax',key:'EQU',code:'EQU'},
+                                    {name:'TransUnion',key:'TU',code:'TU'}]) {
+                    const items=groups[bureau.key]||[];
+                    if (!modern) {
+                        lines.push(bureau.name.toUpperCase()+':');
+                        lines.push(...items.map(item=>'- '+item.address+(item.date?' '+item.date:'')));
+                    } else {
+                        lines.push(...items.map(item=>'- '+String(item.address||'').toUpperCase()+
+                            (item.date?' '+item.date:'')+'('+bureau.code+')'));
+                    }
+                }
+                return lines.join('\n').trim();
+            }
+            return [format(snapshot.previousAddresses),'EMPLOYERS:\n'+format(snapshot.employers)].join('\n\n');
+        }
+        function previewNegativeCopy() {
+            if (!Array.isArray(snapshot.negativeData)) return snapshot.copyNegative;
+            return (snapshot.bankruptcies||[]).map(x=>
+                [x.type,x.reference,x.date,x.status].join('\n'))
+                .concat(snapshot.negativeData.map(item=>
+                    [item.account,item.account_number,item.balance,
+                        (item.bureau_display||'')+' '+(item.account_type||'')].join('\n')))
+                .join('\n\n').trim();
+        }
+        // Table mode renders structured data (not a screenshot or text split)
+        // so every tab and subtab can be compared using readable columns.
+        function currentTableModel() {
+            if (activePage === 'negative') {
+                if (negativeMode === 'disputed') {
+                    const items = snapshot.disputeCategories[disputedCategory] || [];
+                    return {
+                        headers:['Creditor','Type','Account number / Reference','Balance / Filed date','Other reported data'],
+                        rows:items.map(item => {
+                            const groups=getDisputeFieldGroups(item);
+                            return [
+                                item.account || 'Bankruptcy',item.account_type || '',
+                                (groups.primary[0]?.lines || []).join('\n') || 'Not reported',
+                                (groups.primary[1]?.lines || []).join('\n') || 'Not reported',
+                                groups.primary.slice(2).concat(groups.details)
+                                    .map(x=>x.label + ':\n'+x.lines.join('\n')).join('\n\n')
+                            ];
+                        })
+                    };
+                }
+                const negative = snapshot.negativeData || [];
+                const bank = snapshot.bankruptcies || [];
+                return {headers:['Creditor','Account number / Reference','Balance / Filed','Bureau / Status'],
+                    rows:bank.map(x=>[x.type||'Bankruptcy',x.reference||'',x.date||'',x.status||''])
+                        .concat(negative.map(x=>[
+                            x.account||'',x.account_number||'',x.balance||'',
+                            (x.bureau_display||'')+' '+(x.account_type||'')
+                        ]))};
+            }
+            if (activePage === 'inquiries') {
+                if (inquiryMode === 'open') {
+                    const columns = previewSettings.openNamesOnly
+                        ? ['Creditor'] : ['Creditor','Account number','Balance','Bureau','Status'];
+                    return {headers:columns,rows:(snapshot.openAccounts||[]).map(item=>
+                        previewSettings.openNamesOnly?[item.account||'']:[
+                            item.account||'',item.account_number||'',item.balance||'',
+                            item.bureau_display||'',item.account_type||''
+                        ])};
+                }
+                const items = inquiryMode === 'new'
+                    ? (snapshot.newInquiries || [])
+                    : filterInquiriesBeforeDate(snapshot.inquiries || [],previewSettings.beforeDate);
+                const rows=[];
+                for (const item of items) {
+                    for (const bureau of [{key:'experian',code:'EXP'},{key:'equifax',code:'EQU'},{key:'transunion',code:'TU'}]) {
+                        if (!item[bureau.key]) continue;
+                        rows.push([item.creditor||'',item.date||'',bureau.code,
+                            /already disputed/i.test(item.action||'')?'AD':'ND',
+                            item.connectedToOpen?'Possible open-account match':'No confirmed open-account match']);
+                    }
+                }
+                return {headers:['Creditor','Date','Bureau','Dispute','Match'],rows};
+            }
+            const rows=[];
+            for (const [name,groups] of [['Previous address',snapshot.previousAddresses||{}],
+                ['Employer',snapshot.employers||{}]]) {
+                for (const bureau of [{key:'EX',code:'EXP'},{key:'EQU',code:'EQU'},{key:'TU',code:'TU'}]) {
+                    for (const item of (groups[bureau.key]||[])) {
+                        rows.push([name,item.address||'',item.date||'',bureau.code]);
+                    }
+                }
+            }
+            return {headers:['Information','Value','Date','Bureau'],rows};
+        }
+        function renderTableSubnav() {
+            tableModeNav.replaceChildren();
+            tableModeNav.hidden=displayLayout!=='table';
+            if (displayLayout!=='table') return;
+            function navButton(label,active,callback) {
+                const button=put(tableModeNav,make('button','crc-preview-tab'+(active?' active':''),label));
+                button.type='button';
+                button.setAttribute('aria-pressed',String(active));
+                button.addEventListener('click',callback);
+            }
+            if(activePage==='negative') {
+                navButton('All accounts',negativeMode==='standard',()=>selectNegativeMode('standard'));
+                navButton('Disputed Mode',negativeMode==='disputed',()=>selectNegativeMode('disputed'));
+                if(negativeMode==='disputed') {
+                    put(tableModeNav,make('span','crc-preview-meta','Category:'));
+                    for(const [key,label] of Object.entries({delete:'Delete',updated:'Updated',bankruptcy:'Bankruptcy'})) {
+                        navButton(label,disputedCategory===key,()=>selectDisputedCategory(key));
+                    }
+                }
+            } else if(activePage==='inquiries') {
+                for(const [key,label] of Object.entries({inquiries:'Inquiries',open:'Open accounts',new:'New inquiries'})) {
+                    navButton(label,inquiryMode===key,()=>selectInquiryMode(key));
+                }
+            }
+        }
+        function renderPreviewTable() {
+            tableHost.replaceChildren();
+            const model = currentTableModel();
+            if (!model.rows.length) {
+                put(tableHost,make('div','crc-preview-empty','No records in this section.'));
+                return;
+            }
+            const table=put(tableHost,make('table','crc-preview-table'));
+            const head=put(put(table,make('thead')),make('tr'));
+            model.headers.forEach(label=>put(head,make('th','',label)));
+            const body=put(table,make('tbody'));
+            for(const values of model.rows) {
+                const row=put(body,make('tr'));
+                values.forEach(value=>put(row,make('td','',String(value ?? ''))));
+            }
+        }
+        function setDisplayLayout(name) {
+            if (!['grid','table','list'].includes(name)) return;
+            displayLayout=name;
+            root.setAttribute('data-crc-layout',name);
+            for(const [key,button] of layoutButtons) {
+                button.classList.toggle('active',key===name);
+                button.setAttribute('aria-pressed',String(key===name));
+            }
+            try { localStorage.setItem(CRC_PREVIEW_LAYOUT_KEY,name); }
+            catch (_) { /* Layout remains active for this tab. */ }
+            selectPage(activePage);
+        }
         function selectPage(name) {
             activePage = name;
             markSelected(mainTabs,name);
-            Object.entries(pages).forEach(([key,pane]) => { pane.hidden = key !== name; });
+            Object.entries(pages).forEach(([key,pane]) => { pane.hidden = key !== name || displayLayout === 'table'; });
+            tablePane.hidden = displayLayout !== 'table';
+            renderTableSubnav();
+            if (displayLayout === 'table') renderPreviewTable();
         }
         function activeCopyText() {
-            if (activePage === 'personal') return snapshot.copyPersonalInfo;
-            if (activePage === 'inquiries') return inquiryMode === 'open'
-                ? snapshot.copyOpenAccounts
-                : inquiryMode === 'new' ? snapshot.copyNewInquiries : snapshot.copyInquiries;
+            if (activePage === 'personal') return previewPersonalCopy();
+            if (activePage === 'inquiries') {
+                if (inquiryMode === 'open') {
+                    if (!Array.isArray(snapshot.openAccounts)) return snapshot.copyOpenAccounts;
+                    return snapshot.openAccounts.map(item=>previewSettings.openNamesOnly
+                        ? String(item.account||'').trim()
+                        : [item.account||'',item.account_number||'',item.balance||'',
+                            (item.bureau_display||'')+' '+(item.account_type||'')].join('\n')).join('\n\n');
+                }
+                if (!Array.isArray(snapshot.inquiries)) return inquiryMode === 'new'
+                    ? snapshot.copyNewInquiries : snapshot.copyInquiries;
+                return previewInquiryCopy(previewInquiryItems(inquiryMode),
+                    inquiryMode === 'new' ? previewSettings.copyConnectedNew : previewSettings.copyConnected);
+            }
             return negativeMode === 'standard'
-                ? snapshot.copyNegative
+                ? previewNegativeCopy()
                 : (snapshot.disputeCategories[disputedCategory] || [])
                     .map(formatDisputedAccountCopy).join('\n\n');
         }
@@ -3863,12 +4520,14 @@ function extractInquiries() {
             }, 1500);
         });
 
+        refreshPreviewContent();
         selectNegativeMode(negativeMode);
         selectInquiryMode(inquiryMode);
-        selectPage(activePage);
+        setDisplayLayout(displayLayout);
         previewWindow.focus();
         return { doc, pages, selectPage, selectNegativeMode, selectInquiryMode,
-            selectDisputedCategory, activeCopyText };
+            selectDisputedCategory, activeCopyText, setDisplayLayout, currentTableModel,
+            applySetting, refreshPreviewContent, setSettingsVisible };
     }
 
     function showResults(negativeData) {
@@ -4816,6 +5475,58 @@ function extractInquiries() {
                     copyNewInquiries: copyTextNewInquiries,
                     copyPersonalInfo: copyTextPersonalInfo,
                     beforeDate: crcInquiryBeforeDate,
+                    negativeData,
+                    bankruptcies,
+                    inquiries,
+                    newInquiries,
+                    openAccounts,
+                    openAccountsByBureau,
+                    previousAddresses,
+                    employers,
+                    settings: {
+                        bureauPriority: crcBureauPriority,
+                        displayMode: crcDisplayMode,
+                        copyConnected: crcCopyConnectedInquiries,
+                        copyConnectedNew: crcCopyConnectedNew,
+                        openNamesOnly: crcOpenNamesOnly,
+                        beforeDate: crcInquiryBeforeDate,
+                        opacity: crcPanelOpacity
+                    },
+                    onSettingChange(key,value) {
+                        const controls = {
+                            bureauPriority: ['#crc-bureau-priority','change'],
+                            displayMode: ['#crc-display-mode','change'],
+                            copyConnected: ['#crc-copy-connected-inquiries','change'],
+                            copyConnectedNew: ['#crc-copy-connected-new','change'],
+                            openNamesOnly: ['#crc-open-names-only','change'],
+                            opacity: ['#crc-panel-opacity','input']
+                        };
+                        if (key === 'beforeDate') {
+                            crcInquiryBeforeDate = value;
+                            dateFilterInput.value = value;
+                            try {
+                                if (value) localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY,value);
+                                else localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY);
+                            } catch (_) { /* Current session still works. */ }
+                            refreshRegularInquiryDateFilter();
+                            return;
+                        }
+                        const config = controls[key];
+                        if (!config) return;
+                        const input = panel.querySelector(config[0]);
+                        if (!input) return;
+                        if (input.type === 'checkbox') input.checked = Boolean(value);
+                        else input.value = String(value);
+                        input.dispatchEvent(new Event(config[1],{bubbles:true}));
+                    },
+                    onAliasChanged() {
+                        inquiries.forEach(item => {
+                            item.connectedToOpen = isInquiryConnectedToOpenAccount(
+                                item.creditor,item.bureauKey,openAccountsByBureau);
+                        });
+                        renderAliasSettings();
+                        updateInquiryAliasHighlights();
+                    },
                     activePage: buttons[2].classList.contains('active') ? 'personal'
                         : buttons[1].classList.contains('active') ? 'inquiries' : 'negative',
                     negativeMode: disputedModeActive ? 'disputed' : 'standard',

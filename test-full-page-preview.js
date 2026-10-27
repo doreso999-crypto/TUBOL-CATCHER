@@ -13,7 +13,10 @@ assert(source.includes("window.open('about:blank', '_blank')"), 'Must open tab f
 assert(source.includes('renderFullPageReportPreview(previewWindow, {'), 'Preview button needs live snapshot');
 assert(source.includes('const CRC_FULL_PREVIEW_CSS = '), 'Full-screen responsive CSS needed');
 assert(source.includes('max-width:1160px'), 'Full-page layout should be much wider than extractor');
-assert(!implementation.includes('localStorage.'), 'Must not persist report contents');
+assert(!implementation.includes("localStorage.setItem(CRC_PANEL_POSITION_KEY"),
+    'Report content must not be stored in position settings');
+assert(implementation.includes('localStorage.setItem(CRC_PREVIEW_LAYOUT_KEY'),
+    'Only the selected presentation layout is persisted');
 assert(!implementation.includes('fetch('), 'Must not send report information over network');
 assert(!implementation.includes('innerHTML'), 'Never interpolate user credit-report values as HTML');
 
@@ -77,7 +80,8 @@ class Element {
     }
 }
 class PreviewDocument {
-    constructor(){this.head=new Element('head');this.body=new Element('body');this.opened=false;this.closed=false;}
+    constructor(){this.head=new Element('head');this.body=new Element('body');this.opened=false;this.closed=false;this.listeners={};}
+    addEventListener(type,fn){this.listeners[type]=fn;}
     open(){this.opened=true;}
     write(markup){this.staticMarkup=markup;}
     close(){this.closed=true;}
@@ -121,11 +125,35 @@ const snap={
 };
 const makeDisputeCard=item=>origin('crc-dispute-card',item.account);
 const copyDispute=item=>item.account+' xxx123(exp-equ)';
-const renderer=new Function('CSS_STYLES','CRC_FULL_PREVIEW_CSS',
-    'renderDisputeAccountCard','formatDisputedAccountCopy',
+const fakeStorage=new Map();
+const localStorageMock={
+    getItem(key){return fakeStorage.get(key)||null;},
+    setItem(key,value){fakeStorage.set(key,value);}
+};
+const stubDateFilter=(items,date)=>!date?items:items.filter(x=>{
+    const [month,day,year]=x.date.split('/').map(Number);
+    return x.date && new Date(year,month-1,day)<new Date(date+'T00:00:00');
+});
+const stubPriority=(items,preferred)=>items.forEach(x=>{
+    const code={equifax:'equ',experian:'exp',transunion:'tu'}[preferred];
+    if(x.bureau_fields?.[code]){
+        x.account_number=x.bureau_fields[code]['Account #']||x.account_number;
+        x.balance=x.bureau_fields[code].Balance||x.balance;
+    }
+});
+const stubDisputeFields=item=>({
+    primary:[{lines:[item.account||'']}],details:[]});
+const renderer=new Function('CSS_STYLES','CRC_FULL_PREVIEW_CSS','CRC_PREVIEW_LAYOUT_KEY',
+    'localStorage','renderDisputeAccountCard','formatDisputedAccountCopy',
+    'filterInquiriesBeforeDate','updateNegativePreferredValues','getDisputeFieldGroups',
+    'CREDITOR_ALIAS_GROUPS','CREDITOR_DISPLAY_NAMES','CREDITOR_USER_GROUPS',
+    'listCreditorAliases',
     implementation+'\nreturn renderFullPageReportPreview;')(
         '#crc-negative-panel{width:440px}','.crc-preview-layout{max-width:1160px}',
-        makeDisputeCard,copyDispute
+        'tubol-crc-preview-layout-v1',localStorageMock,
+        makeDisputeCard,copyDispute,
+        stubDateFilter,stubPriority,stubDisputeFields,
+        [{id:'bank'}],{bank:'Bank Co'},[],()=>[{alias:'Bank Co'}]
     );
 return (async()=>{
 const preview=renderer(windowMock,snap);
@@ -164,5 +192,94 @@ assert.equal(copied,'PERSONAL ORIGINAL','Copy action must honor currently select
 assert.equal(button.textContent,'Copy current view','Button resets after copying');
 assert(source.includes('Copy current view'),'Copy action should be clearly named');
 assert(source.includes('Snapshot from your current report'),'Snapshot status visible');
-console.log('PASS: isolated full-page snapshot, 3 report tabs, disputed & inquiry navigation, bureau expand, per-view copy and no report storage');
+
+// Table, Grid and List are working, persisted presentation modes.
+preview.setDisplayLayout('table');
+assert.equal(fakeStorage.get('tubol-crc-preview-layout-v1'),'table');
+assert.equal(preview.pages.personal.hidden,true,'Table mode hides card view');
+assert(doc.body.querySelector('.crc-preview-table-pane'));
+// The Table view must still expose the nested Disputed Mode categories
+// and inquiry subtabs, without returning to Grid first.
+preview.selectPage('negative');
+preview.selectNegativeMode('disputed');
+const tableSubnav=doc.body.querySelectorAll('.crc-preview-subnav')
+    .find(n=>n.attributes['aria-label']==='Table section filters');
+assert(tableSubnav,'Table mode must have accessible subnavigation');
+assert.equal(tableSubnav.hidden,false);
+const updatedTab=tableSubnav.children.find(n=>n.textContent==='Updated');
+assert(updatedTab,'Updated category must remain accessible in Table mode');
+await updatedTab.click();
+assert(preview.activeCopyText().includes('Updated Candidate'));
+preview.selectPage('inquiries');
+const openTab=tableSubnav.children.find(n=>n.textContent==='Open accounts');
+assert(openTab,'Open accounts subtab must remain accessible in Table mode');
+await openTab.click();
+assert.equal(preview.activeCopyText(),'OPEN ACCOUNT ORIGINAL');
+preview.setDisplayLayout('list');
+assert.equal(fakeStorage.get('tubol-crc-preview-layout-v1'),'list');
+preview.selectPage('personal');
+assert.equal(preview.pages.personal.hidden,false);
+preview.setDisplayLayout('grid');
+assert.equal(fakeStorage.get('tubol-crc-preview-layout-v1'),'grid');
+
+// Rich snapshot data can be re-rendered when Settings change without
+// changing the original report, and copy reflects those settings.
+const changes=[];
+snap.onSettingChange=(key,value)=>changes.push({key,value});
+snap.negativeData=[{
+    account:'Example Bank',account_number:'eq007',balance:'$800',
+    bureau_display:'3BR-',account_type:'CHARGE OFF',
+    bureau_fields:{equ:{'Account #':'eq007',Balance:'$800'},
+                   exp:{'Account #':'ex008',Balance:'$900'}}
+}];
+snap.bankruptcies=[];
+snap.inquiries=[
+    {creditor:'ALPHA',date:'12/31/2024',experian:true,equifax:false,transunion:false,connectedToOpen:false},
+    {creditor:'CONNECTED',date:'01/01/2025',experian:true,equifax:false,transunion:false,connectedToOpen:true}
+];
+snap.newInquiries=[snap.inquiries[1]];
+snap.openAccounts=[{account:'Example Bank',account_number:'ex008',balance:'$900',bureau_display:'EX',account_type:'OPEN'}];
+snap.previousAddresses={EX:[{address:'123 MAIN ST',date:'02/2024'}],EQU:[],TU:[]};
+snap.employers={EX:[{address:'ACME',date:''}],EQU:[],TU:[]};
+preview.refreshPreviewContent();
+preview.selectPage('negative');
+preview.selectNegativeMode('standard');
+assert(preview.activeCopyText().includes('eq007'));
+preview.applySetting('bureauPriority','experian');
+assert(preview.activeCopyText().includes('ex008'));
+assert(!preview.activeCopyText().includes('eq007'));
+preview.setDisplayLayout('table');
+let table=preview.currentTableModel();
+assert.equal(table.rows[0][0],'Example Bank');
+assert.equal(table.rows[0][1],'ex008');
+preview.selectPage('inquiries');
+preview.selectInquiryMode('inquiries');
+preview.applySetting('beforeDate','');
+table=preview.currentTableModel();
+assert.equal(table.rows.length,2);
+assert(!preview.activeCopyText().includes('CONNECTED'));
+preview.applySetting('copyConnected',true);
+assert(preview.activeCopyText().includes('CONNECTED'));
+preview.applySetting('beforeDate','2025-01-01');
+assert.equal(preview.currentTableModel().rows.length,1);
+assert(preview.activeCopyText().includes('ALPHA'));
+assert(!preview.activeCopyText().includes('CONNECTED'));
+preview.selectInquiryMode('open');
+preview.applySetting('openNamesOnly',true);
+assert.equal(preview.currentTableModel().headers.length,1);
+assert.equal(preview.activeCopyText(),'Example Bank');
+preview.selectPage('personal');
+assert.equal(preview.currentTableModel().rows.length,2);
+preview.applySetting('displayMode','legacy');
+assert(preview.activeCopyText().includes('EXPERIAN:'));
+preview.applySetting('opacity',85);
+assert.equal(doc.body.querySelector('#crc-negative-panel').style.opacity,'0.85');
+assert(changes.some(x=>x.key==='opacity'&&x.value===85));
+assert(changes.some(x=>x.key==='bureauPriority'&&x.value==='experian'));
+preview.setSettingsVisible(true);
+assert.equal(doc.body.querySelector('.crc-preview-settings').hidden,false);
+preview.setSettingsVisible(false);
+assert.equal(doc.body.querySelector('.crc-preview-settings').hidden,true);
+preview.setDisplayLayout('grid');
+console.log('PASS: full-page Grid/Table/List, live Settings and saved layout, priority, copy filters, date, aliases drawer and navigation');
 })();
