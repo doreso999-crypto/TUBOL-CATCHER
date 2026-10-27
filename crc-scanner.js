@@ -3855,6 +3855,190 @@ function extractInquiries() {
         settingsOpenButton.setAttribute('aria-haspopup','dialog');
         settingsOpenButton.setAttribute('aria-expanded','false');
 
+        // Working Settings drawer for the full-page workspace. These
+        // controls use the same preferences as the extractor and update it
+        // immediately through the opener callback when available.
+        const dimmer = put(doc.body,make('div','crc-preview-dimmer'));
+        dimmer.hidden=true;
+        const settingsDrawer = put(doc.body,make('aside','crc-preview-settings crc-preview-dialog'));
+        settingsDrawer.hidden=true;
+        settingsDrawer.setAttribute('role','dialog');
+        settingsDrawer.setAttribute('aria-modal','true');
+        settingsDrawer.setAttribute('aria-label','Full-page report settings');
+        const settingsHead=put(settingsDrawer,make('div','crc-preview-settings-head'));
+        put(settingsHead,make('h2','','Report settings'));
+        const settingsClose=put(settingsHead,make('button','crc-preview-settings-close','×'));
+        settingsClose.type='button';
+        settingsClose.setAttribute('aria-label','Close Settings');
+        const settingsBody=put(settingsDrawer,make('div','crc-preview-settings-scroll'));
+        const preferenceControls={};
+        function addSettingsHeading(value) {put(settingsBody,make('h3','',value));}
+        function addSelect(key,label,choices,description) {
+            const text=put(settingsBody,make('label','',label));
+            const input=put(settingsBody,make('select'));
+            const id='crc-preview-pref-'+key;
+            text.setAttribute('for',id);input.id=id;
+            choices.forEach(([value,name])=>{
+                const opt=put(input,make('option','',name));
+                opt.value=value;
+            });
+            input.value=String(previewSettings[key]);
+            input.addEventListener('change',()=>applySetting(key,input.value));
+            preferenceControls[key]=input;
+            if(description) put(settingsBody,make('p','crc-preview-setting-note',description));
+        }
+        function addCheckbox(key,label) {
+            const row=put(settingsBody,make('label','crc-preview-check'));
+            const input=put(row,make('input'));input.type='checkbox';
+            input.checked=Boolean(previewSettings[key]);
+            put(row,make('span','',label));
+            input.addEventListener('change',()=>applySetting(key,input.checked));
+            preferenceControls[key]=input;
+        }
+        addSettingsHeading('Appearance');
+        addSelect('bureauPriority','Preferred bureau for regular Negative view',[
+            ['equifax','Equifax first'],['experian','Experian first'],
+            ['transunion','TransUnion first']
+        ],'Disputed Mode always shows all bureaus, regardless of priority.');
+        addSelect('displayMode','Display format',[
+            ['modern','Modern — uppercase and bureau labels'],
+            ['legacy','Legacy — grouped original names']
+        ]);
+        const opacityLabel=put(settingsBody,make('label','', 'Report opacity'));
+        const opacityInput=put(settingsBody,make('input'));
+        opacityInput.type='range';opacityInput.min='60';opacityInput.max='100';
+        opacityInput.step='1';opacityInput.value=String(previewSettings.opacity);
+        const opacityText=put(settingsBody,make('p','crc-preview-setting-note',
+            previewSettings.opacity+'%'));
+        opacityInput.addEventListener('input',()=>{
+            opacityText.textContent=opacityInput.value+'%';
+            applySetting('opacity',Number(opacityInput.value));
+        });
+        preferenceControls.opacity=opacityInput;
+        addSettingsHeading('Inquiries & open accounts');
+        addCheckbox('copyConnected','Copy inquiries connected to open accounts');
+        addCheckbox('copyConnectedNew','Copy connected NEW inquiries');
+        addCheckbox('openNamesOnly','Show and copy open-account names only');
+        const dateLabel=put(settingsBody,make('label','','Show regular inquiries BEFORE'));
+        const dateInput=put(settingsBody,make('input'));dateInput.type='date';
+        dateInput.id='crc-preview-date-cutoff';dateLabel.setAttribute('for',dateInput.id);
+        dateInput.value=previewSettings.beforeDate||'';
+        preferenceControls.beforeDate=dateInput;
+        put(settingsBody,make('p','crc-preview-setting-note',
+            'Exclusive cutoff: Jan 1, 2025 shows Dec 2024 and older. NEW is unaffected.'));
+        const dateActions=put(settingsBody,make('div','crc-preview-setting-actions'));
+        const applyDate=put(dateActions,make('button','','Apply date'));
+        applyDate.type='button';
+        applyDate.addEventListener('click',()=>applySetting('beforeDate',dateInput.value));
+        const clearDate=put(dateActions,make('button','secondary','Show all'));
+        clearDate.type='button';
+        clearDate.addEventListener('click',()=>{
+            dateInput.value='';applySetting('beforeDate','');
+        });
+        addSettingsHeading('Creditor aliases');
+        put(settingsBody,make('p','crc-preview-setting-note',
+            'Manage creditor aliases used to flag possible inquiry matches. Changes are saved in the same browser as the original extractor.'));
+        const aliasSearch=put(settingsBody,make('input'));
+        aliasSearch.type='search';aliasSearch.placeholder='Search creditors or aliases';
+        aliasSearch.setAttribute('aria-label','Find creditor aliases');
+        const aliasGroups=put(settingsBody,make('div','crc-preview-alias-groups'));
+        const aliasActions=put(settingsBody,make('div','crc-preview-setting-actions'));
+        const resetAliases=put(aliasActions,make('button','secondary','Restore default aliases'));
+        resetAliases.type='button';
+        const aliasNameLabel=put(settingsBody,make('label','','Creditor alias to assign'));
+        const aliasName=put(settingsBody,make('input'));
+        aliasName.type='text';aliasName.placeholder='Creditor name as shown on report';
+        const aliasSelectLabel=put(settingsBody,make('label','','Assign to existing creditor'));
+        const aliasSelect=put(settingsBody,make('select'));
+        const aliasNewLabel=put(settingsBody,make('label','','Or create a new creditor'));
+        const aliasNewName=put(settingsBody,make('input'));
+        aliasNewName.type='text';aliasNewName.placeholder='New creditor display name';
+        const aliasSaveActions=put(settingsBody,make('div','crc-preview-setting-actions'));
+        const aliasSave=put(aliasSaveActions,make('button','','Save alias / creditor'));
+        aliasSave.type='button';
+        const aliasFeedback=put(settingsBody,make('p','crc-preview-setting-note',''));
+        function notifyAliasChanged() {
+            snapshot.onAliasChanged?.();
+            if (Array.isArray(snapshot.inquiries) && snapshot.openAccountsByBureau) {
+                snapshot.inquiries.forEach(item=>{
+                    item.connectedToOpen=isInquiryConnectedToOpenAccount(
+                        item.creditor,item.bureauKey,snapshot.openAccountsByBureau);
+                });
+            }
+            renderAliasGroups();
+            refreshPreviewContent();
+        }
+        function renderAliasGroups() {
+            aliasGroups.replaceChildren();
+            aliasSelect.replaceChildren();
+            put(aliasSelect,make('option','','Choose creditor…')).value='';
+            if (typeof aliasGroupsSorted !== 'function') return;
+            const query=aliasSearch.value.toLowerCase().trim();
+            for (const group of aliasGroupsSorted()) {
+                const title=CREDITOR_DISPLAY_NAMES[group.id] || group.id;
+                const variants=getCreditorVariants(group.id);
+                const variations=variants.map(x=>typeof x==='string'?x:x.alias);
+                const option=put(aliasSelect,make('option','',title));
+                option.value=group.id;
+                if (query && !title.toLowerCase().includes(query) &&
+                    !variations.some(n=>n.toLowerCase().includes(query))) continue;
+                const details=put(aliasGroups,make('details'));
+                put(details,make('summary','',title+' ('+variations.length+')'));
+                variations.forEach(variant=>{
+                    const row=put(details,make('div',''));
+                    row.style.display='flex';row.style.justifyContent='space-between';
+                    put(row,make('span','',variant));
+                    const remove=put(row,make('button','','Remove'));
+                    remove.type='button';remove.setAttribute('aria-label','Remove alias '+variant);
+                    remove.addEventListener('click',()=>{
+                        if (!previewWindow.confirm('Remove alias "'+variant+'"?')) return;
+                        const result=deleteCreditorAlias(variant,group.id);
+                        aliasFeedback.textContent=result.message;
+                        if(result.ok)notifyAliasChanged();
+                    });
+                });
+            }
+        }
+        aliasSearch.addEventListener('input',renderAliasGroups);
+        resetAliases.addEventListener('click',()=>{
+            if(!previewWindow.confirm('Remove all custom aliases and restore defaults?'))return;
+            const result=resetCreditorAliases();
+            aliasFeedback.textContent=result.message;
+            if(result.ok)notifyAliasChanged();
+        });
+        aliasSave.addEventListener('click',()=>{
+            const alias=aliasName.value.trim();
+            const newName=aliasNewName.value.trim();
+            const result=newName?createCreditorGroup(newName,alias):
+                alias?addCreditorAlias(alias,aliasSelect.value):
+                {ok:false,message:'Enter a creditor alias or a new creditor name.'};
+            aliasFeedback.textContent=result.message;
+            if(result.ok){
+                aliasName.value='';aliasNewName.value='';
+                notifyAliasChanged();
+            }
+        });
+        function setSettingsVisible(open) {
+            dimmer.hidden=!open;
+            settingsDrawer.hidden=!open;
+            settingsOpenButton.setAttribute('aria-expanded',String(open));
+            if (open) renderAliasGroups();
+        }
+        settingsOpenButton.addEventListener('click',()=>setSettingsVisible(settingsDrawer.hidden));
+        settingsClose.addEventListener('click',()=>setSettingsVisible(false));
+        dimmer.addEventListener('click',()=>setSettingsVisible(false));
+        doc.addEventListener('keydown',event=>{
+            if(event.key==='Escape' && !settingsDrawer.hidden) setSettingsVisible(false);
+        });
+        function applySetting(key,value) {
+            previewSettings[key]=value;
+            if(key==='opacity') root.style.opacity=String(Number(value)/100);
+            try { snapshot.onSettingChange?.(key,value); }
+            catch (err) { console.warn('Source extractor settings unavailable',err); }
+            refreshPreviewContent();
+        }
+        root.style.opacity=String(Number(previewSettings.opacity)/100);
+
         const nav = put(layout, make('nav', 'crc-preview-nav'));
         nav.setAttribute('aria-label', 'Report sections');
         nav.setAttribute('role', 'tablist');
