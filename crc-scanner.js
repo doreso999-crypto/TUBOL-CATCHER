@@ -3523,12 +3523,36 @@ function extractInquiries() {
             { title: "Equifax", items: regularInquiries.filter(i => i.equifax) },
             { title: "TransUnion", items: regularInquiries.filter(i => i.transunion) }
         ];
+        function formatInquiryFilterDate(value) {
+            if (!value) return '';
+            const parts = value.split('-').map(Number);
+            const date = new Date(parts[0], parts[1] - 1, parts[2]);
+            return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        }
         function updateDateFilterSummary() {
-            dateFilterSummary.textContent = crcInquiryBeforeDate
-                ? 'Showing ' + regularInquiries.length + ' of ' + inquiries.length +
-                  ' inquiries dated before ' + crcInquiryBeforeDate +
-                  '. Inquiries with missing or invalid dates are excluded.'
-                : 'Showing all ' + inquiries.length + ' inquiries. Set a date to exclude that date and anything newer.';
+            const active = Boolean(crcInquiryBeforeDate);
+            dateFilterToggle.classList.toggle('crc-date-active', active);
+            dateFilterButtonLabel.textContent = active
+                ? 'Before ' + formatInquiryFilterDate(crcInquiryBeforeDate)
+                : 'Filter by date';
+            dateFilterSummary.textContent = active
+                ? regularInquiries.length + ' of ' + inquiries.length + ' inquiries'
+                : 'All ' + inquiries.length + ' inquiries';
+            dateFilterSummary.title = active
+                ? 'Only inquiries strictly before ' + crcInquiryBeforeDate +
+                  '. Inquiries with no valid date are excluded.'
+                : 'All inquiries shown. The NEW subtab is independent.';
+        }
+        function setInquiryDatePopoverOpen(open) {
+            if (open && dateFilterWrap.hidden) return;
+            dateFilterPopover.hidden = !open;
+            dateFilterToggle.setAttribute('aria-expanded', String(open));
+            if (open) {
+                dateFilterInput.value = crcInquiryBeforeDate;
+                dateFilterHelp.textContent = 'Example: Jan 1, 2025 shows Dec 2024 and earlier. The selected date is excluded.';
+            }
+            // No automatic .focus(): opening, closing and editing should not
+            // interrupt inquiry-list focus or cause list re-rendering.
         }
         updateDateFilterSummary();
 
@@ -3545,18 +3569,50 @@ function extractInquiries() {
             copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
             updateDateFilterSummary();
         }
-        dateFilterInput.addEventListener('change', () => {
-            crcInquiryBeforeDate = /^\d{4}-\d{2}-\d{2}$/.test(dateFilterInput.value) ? dateFilterInput.value : '';
-            try { localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY, crcInquiryBeforeDate); }
-            catch (_) { /* Filtering works in the current session. */ }
+        dateFilterToggle.addEventListener('click', () => {
+            setInquiryDatePopoverOpen(dateFilterPopover.hidden);
+        });
+        dateFilterApply.addEventListener('click', () => {
+            const selected = dateFilterInput.value;
+            if (selected) {
+                const m = selected.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                if (!m || !Number.isFinite(Date.parse(selected)) ||
+                    new Date(+m[1], +m[2] - 1, +m[3]).getDate() !== +m[3]) {
+                    dateFilterHelp.textContent = 'Please choose a valid date.';
+                    return;
+                }
+            }
+            crcInquiryBeforeDate = selected;
+            try {
+                if (selected) localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY, selected);
+                else localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY);
+            } catch (_) { /* Works for the current session. */ }
             refreshRegularInquiryDateFilter();
+            setInquiryDatePopoverOpen(false);
         });
         dateFilterClear.addEventListener('click', () => {
             dateFilterInput.value = '';
             crcInquiryBeforeDate = '';
             try { localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY); }
-            catch (_) { /* Filtering works in the current session. */ }
+            catch (_) { /* Works for the current session. */ }
             refreshRegularInquiryDateFilter();
+            setInquiryDatePopoverOpen(false);
+        });
+        dateFilterCancel.addEventListener('click', () => {
+            setInquiryDatePopoverOpen(false);
+        });
+        // Opening a native calendar or editing a draft date does NOT rerender
+        // inquiry rows. Only explicit Apply and Show all commit a new filter.
+        panel.addEventListener('pointerdown', event => {
+            if (!dateFilterPopover.hidden && !dateFilterWrap.contains(event.target)) {
+                setInquiryDatePopoverOpen(false);
+            }
+        });
+        panel.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !dateFilterPopover.hidden) {
+                setInquiryDatePopoverOpen(false);
+                event.stopPropagation();
+            }
         });
 
         // ========================================
@@ -3808,6 +3864,7 @@ function extractInquiries() {
             openAccountsView.style.display = view === 'open' ? '' : 'none';
             newInquiriesView.style.display = view === 'new' ? '' : 'none';
             dateFilterWrap.hidden = view !== 'inquiries';
+            if (view !== 'inquiries') setInquiryDatePopoverOpen(false);
 
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
