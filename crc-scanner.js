@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.5
+// @version      4.6
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -1233,45 +1233,128 @@ Controls padding, font, spacing, and appearance for all 3
 /* =========================================================
    INQUIRIES SUBTABS
    ========================================================= */
+#crc-inquiries {
+    position: relative;
+}
+/* One quiet toolbar row; the editing popover overlays rather than
+   pushes the bureau list down or steals focus while scrolling. */
 #crc-inquiry-date-filter {
+    position: relative;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    margin: 8px 4px 14px;
-    padding: 12px;
-    background: #232426;
-    border: 1px solid #424446;
-    border-radius: 10px;
+    min-width: 0;
+    margin: 2px 4px 10px;
+    padding: 0;
 }
 #crc-inquiry-date-filter[hidden] { display: none !important; }
-#crc-inquiry-date-filter label {
+#crc-inquiry-date-toggle {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 73%;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 10px;
+    border: 1px solid #555a63;
+    border-radius: 9px;
+    background: #24282e;
+    color: #e4e6eb;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+#crc-inquiry-date-toggle:hover, #crc-inquiry-date-toggle[aria-expanded="true"] {
+    background: #313841;
+    border-color: #7197c7;
+}
+#crc-inquiry-date-toggle.crc-date-active {
+    color: #c6dcff;
+    background: #26364b;
+    border-color: #426b9d;
+}
+#crc-inquiry-date-toggle .crc-date-button-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#crc-inquiry-date-summary {
+    flex: 1;
+    text-align: right;
+    white-space: nowrap;
+    font-size: 12px;
+    color: #adb6c1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#crc-inquiry-date-popover {
+    position: absolute;
+    top: calc(100% + 7px);
+    left: 0;
+    z-index: 40;
+    width: min(325px, 100%);
+    box-sizing: border-box;
+    padding: 15px;
+    background: #292d33;
+    border: 1px solid #59616b;
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.55);
+}
+#crc-inquiry-date-popover[hidden] { display: none !important; }
+#crc-inquiry-date-popover label {
+    display: block;
+    margin-bottom: 8px;
+    color: #f3f4f6;
+    font-size: 14px;
+    font-weight: 750;
+}
+#crc-inquiry-before-date {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 42px;
+    padding: 9px 12px;
+    background: #181c22;
+    color: #e4e6eb;
+    border: 1px solid #6a727e;
+    border-radius: 8px;
+    font-size: 15px;
+    color-scheme: dark;
+}
+#crc-inquiry-before-date:focus-visible, #crc-inquiry-date-toggle:focus-visible,
+.crc-date-popover-actions button:focus-visible {
+    outline: 2px solid #8bb7fa;
+    outline-offset: 2px;
+}
+.crc-date-help {
+    margin: 9px 0 13px;
+    color: #bac1ca;
+    font-size: 12px;
+    line-height: 1.45;
+}
+.crc-date-popover-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.crc-date-popover-actions button {
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid #59616b;
+    background: #393e45;
+    color: #eceff3;
+    cursor: pointer;
     font-size: 13px;
     font-weight: 700;
 }
-#crc-inquiry-before-date {
-    color: #e4e6eb;
-    background: #18191a;
-    border: 1px solid #57595d;
-    border-radius: 6px;
-    padding: 7px;
-    min-height: 34px;
-    box-sizing: border-box;
-    color-scheme: dark;
+.crc-date-popover-actions .crc-date-apply {
+    background: #2374e1;
+    border-color: #2374e1;
+    color: white;
 }
-#crc-inquiry-date-clear {
-    border: 1px solid #666;
-    border-radius: 6px;
-    color: #e4e6eb;
-    background: #3a3b3c;
-    padding: 8px 12px;
-    cursor: pointer;
-}
-#crc-inquiry-date-summary {
-    flex-basis: 100%;
-    font-size: 12px;
-    color: #b0b3b8;
-}
+#crc-inquiry-date-clear { margin-right: auto; }
 
 
 .crc-subtabs {
@@ -3150,7 +3233,13 @@ function extractInquiries() {
             bar.removeEventListener('pointercancel', pointerEnd);
         }
         panel.__crcDisposeDrag = destroy;
-        return { reclamp, destroy };
+        // Minimize / restore around the current upper-right corner,
+        // rather than shrinking the window around its top-left corner.
+        function keepTopRightAnchor(right, top) {
+            const width = panel.getBoundingClientRect().width;
+            return movePanel(right - width, top);
+        }
+        return { reclamp, keepTopRightAnchor, savePosition, destroy };
     }
 
     function showResults(negativeData) {
@@ -3342,24 +3431,69 @@ function extractInquiries() {
         // independent and continues showing inquiries from the last 35 days.
         const dateFilterWrap = document.createElement('div');
         dateFilterWrap.id = 'crc-inquiry-date-filter';
+
+        // The toolbar is collapsed by default and does not take focus from
+        // the inquiries or change the list while someone edits the date.
+        const dateFilterToggle = document.createElement('button');
+        dateFilterToggle.type = 'button';
+        dateFilterToggle.id = 'crc-inquiry-date-toggle';
+        dateFilterToggle.setAttribute('aria-haspopup', 'dialog');
+        dateFilterToggle.setAttribute('aria-expanded', 'false');
+        dateFilterToggle.setAttribute('aria-controls', 'crc-inquiry-date-popover');
+        dateFilterToggle.title = 'Set a cutoff for INQUIRIES only';
+        const dateFilterIcon = document.createElement('span');
+        dateFilterIcon.setAttribute('aria-hidden', 'true');
+        dateFilterIcon.textContent = '▦';
+        const dateFilterButtonLabel = document.createElement('span');
+        dateFilterButtonLabel.className = 'crc-date-button-label';
+        dateFilterToggle.appendChild(dateFilterIcon);
+        dateFilterToggle.appendChild(dateFilterButtonLabel);
+
+        const dateFilterSummary = document.createElement('div');
+        dateFilterSummary.id = 'crc-inquiry-date-summary';
+        dateFilterSummary.setAttribute('aria-live', 'polite');
+
+        const dateFilterPopover = document.createElement('div');
+        dateFilterPopover.id = 'crc-inquiry-date-popover';
+        dateFilterPopover.setAttribute('role', 'dialog');
+        dateFilterPopover.setAttribute('aria-label', 'Inquiry date filter');
+        dateFilterPopover.hidden = true;
         const dateFilterLabel = document.createElement('label');
         dateFilterLabel.htmlFor = 'crc-inquiry-before-date';
-        dateFilterLabel.textContent = 'Show inquiries BEFORE';
+        dateFilterLabel.textContent = 'Show inquiries before';
         const dateFilterInput = document.createElement('input');
         dateFilterInput.type = 'date';
         dateFilterInput.id = 'crc-inquiry-before-date';
         dateFilterInput.value = crcInquiryBeforeDate;
-        dateFilterInput.title = 'Exclusive cutoff: select Jan 1, 2025 to show Dec 2024 and older';
+        dateFilterInput.title = 'The selected date itself is excluded';
+        const dateFilterHelp = document.createElement('p');
+        dateFilterHelp.className = 'crc-date-help';
+        dateFilterHelp.textContent = 'Example: Jan 1, 2025 shows Dec 2024 and earlier. The selected date is excluded.';
+        const dateFilterActions = document.createElement('div');
+        dateFilterActions.className = 'crc-date-popover-actions';
         const dateFilterClear = document.createElement('button');
         dateFilterClear.type = 'button';
         dateFilterClear.id = 'crc-inquiry-date-clear';
         dateFilterClear.textContent = 'Show all';
-        const dateFilterSummary = document.createElement('div');
-        dateFilterSummary.id = 'crc-inquiry-date-summary';
-        dateFilterWrap.appendChild(dateFilterLabel);
-        dateFilterWrap.appendChild(dateFilterInput);
-        dateFilterWrap.appendChild(dateFilterClear);
+        const dateFilterApply = document.createElement('button');
+        dateFilterApply.type = 'button';
+        dateFilterApply.id = 'crc-inquiry-date-apply';
+        dateFilterApply.className = 'crc-date-apply';
+        dateFilterApply.textContent = 'Apply';
+        const dateFilterCancel = document.createElement('button');
+        dateFilterCancel.type = 'button';
+        dateFilterCancel.id = 'crc-inquiry-date-cancel';
+        dateFilterCancel.textContent = 'Cancel';
+        dateFilterActions.appendChild(dateFilterClear);
+        dateFilterActions.appendChild(dateFilterCancel);
+        dateFilterActions.appendChild(dateFilterApply);
+        dateFilterPopover.appendChild(dateFilterLabel);
+        dateFilterPopover.appendChild(dateFilterInput);
+        dateFilterPopover.appendChild(dateFilterHelp);
+        dateFilterPopover.appendChild(dateFilterActions);
+        dateFilterWrap.appendChild(dateFilterToggle);
         dateFilterWrap.appendChild(dateFilterSummary);
+        dateFilterWrap.appendChild(dateFilterPopover);
         inquiriesDiv.appendChild(dateFilterWrap);
 
         const inquiriesView = document.createElement('div');
@@ -3389,12 +3523,36 @@ function extractInquiries() {
             { title: "Equifax", items: regularInquiries.filter(i => i.equifax) },
             { title: "TransUnion", items: regularInquiries.filter(i => i.transunion) }
         ];
+        function formatInquiryFilterDate(value) {
+            if (!value) return '';
+            const parts = value.split('-').map(Number);
+            const date = new Date(parts[0], parts[1] - 1, parts[2]);
+            return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+        }
         function updateDateFilterSummary() {
-            dateFilterSummary.textContent = crcInquiryBeforeDate
-                ? 'Showing ' + regularInquiries.length + ' of ' + inquiries.length +
-                  ' inquiries dated before ' + crcInquiryBeforeDate +
-                  '. Inquiries with missing or invalid dates are excluded.'
-                : 'Showing all ' + inquiries.length + ' inquiries. Set a date to exclude that date and anything newer.';
+            const active = Boolean(crcInquiryBeforeDate);
+            dateFilterToggle.classList.toggle('crc-date-active', active);
+            dateFilterButtonLabel.textContent = active
+                ? 'Before ' + formatInquiryFilterDate(crcInquiryBeforeDate)
+                : 'Filter by date';
+            dateFilterSummary.textContent = active
+                ? regularInquiries.length + ' of ' + inquiries.length + ' inquiries'
+                : 'All ' + inquiries.length + ' inquiries';
+            dateFilterSummary.title = active
+                ? 'Only inquiries strictly before ' + crcInquiryBeforeDate +
+                  '. Inquiries with no valid date are excluded.'
+                : 'All inquiries shown. The NEW subtab is independent.';
+        }
+        function setInquiryDatePopoverOpen(open) {
+            if (open && dateFilterWrap.hidden) return;
+            dateFilterPopover.hidden = !open;
+            dateFilterToggle.setAttribute('aria-expanded', String(open));
+            if (open) {
+                dateFilterInput.value = crcInquiryBeforeDate;
+                dateFilterHelp.textContent = 'Example: Jan 1, 2025 shows Dec 2024 and earlier. The selected date is excluded.';
+            }
+            // No automatic .focus(): opening, closing and editing should not
+            // interrupt inquiry-list focus or cause list re-rendering.
         }
         updateDateFilterSummary();
 
@@ -3411,18 +3569,50 @@ function extractInquiries() {
             copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
             updateDateFilterSummary();
         }
-        dateFilterInput.addEventListener('change', () => {
-            crcInquiryBeforeDate = /^\d{4}-\d{2}-\d{2}$/.test(dateFilterInput.value) ? dateFilterInput.value : '';
-            try { localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY, crcInquiryBeforeDate); }
-            catch (_) { /* Filtering works in the current session. */ }
+        dateFilterToggle.addEventListener('click', () => {
+            setInquiryDatePopoverOpen(dateFilterPopover.hidden);
+        });
+        dateFilterApply.addEventListener('click', () => {
+            const selected = dateFilterInput.value;
+            if (selected) {
+                const m = selected.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                if (!m || !Number.isFinite(Date.parse(selected)) ||
+                    new Date(+m[1], +m[2] - 1, +m[3]).getDate() !== +m[3]) {
+                    dateFilterHelp.textContent = 'Please choose a valid date.';
+                    return;
+                }
+            }
+            crcInquiryBeforeDate = selected;
+            try {
+                if (selected) localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY, selected);
+                else localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY);
+            } catch (_) { /* Works for the current session. */ }
             refreshRegularInquiryDateFilter();
+            setInquiryDatePopoverOpen(false);
         });
         dateFilterClear.addEventListener('click', () => {
             dateFilterInput.value = '';
             crcInquiryBeforeDate = '';
             try { localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY); }
-            catch (_) { /* Filtering works in the current session. */ }
+            catch (_) { /* Works for the current session. */ }
             refreshRegularInquiryDateFilter();
+            setInquiryDatePopoverOpen(false);
+        });
+        dateFilterCancel.addEventListener('click', () => {
+            setInquiryDatePopoverOpen(false);
+        });
+        // Opening a native calendar or editing a draft date does NOT rerender
+        // inquiry rows. Only explicit Apply and Show all commit a new filter.
+        panel.addEventListener('pointerdown', event => {
+            if (!dateFilterPopover.hidden && !dateFilterWrap.contains(event.target)) {
+                setInquiryDatePopoverOpen(false);
+            }
+        });
+        panel.addEventListener('keydown', event => {
+            if (event.key === 'Escape' && !dateFilterPopover.hidden) {
+                setInquiryDatePopoverOpen(false);
+                event.stopPropagation();
+            }
         });
 
         // ========================================
@@ -3674,6 +3864,7 @@ function extractInquiries() {
             openAccountsView.style.display = view === 'open' ? '' : 'none';
             newInquiriesView.style.display = view === 'new' ? '' : 'none';
             dateFilterWrap.hidden = view !== 'inquiries';
+            if (view !== 'inquiries') setInquiryDatePopoverOpen(false);
 
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
@@ -3803,10 +3994,13 @@ function extractInquiries() {
 
         panel.querySelector("#crc-minimize-btn").onclick = function() {
             setSettingsOpen(false);
+            const before = panel.getBoundingClientRect();
             panel.classList.toggle("crc-minimized");
             this.textContent = panel.classList.contains("crc-minimized") ? "+" : "−";
-            // The window is draggable from its top bar in either state.
-            dragControls.reclamp();
+            // Match the prior right edge after the width changes.
+            // The saved coordinates represent the current window size.
+            dragControls.keepTopRightAnchor(before.right, before.top);
+            dragControls.savePosition();
         };
 
         // ========================================

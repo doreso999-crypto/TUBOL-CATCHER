@@ -1,6 +1,6 @@
 # TUBOL-CATCHER
 
-## Extractor appearance and dragging (v4.5)
+## Extractor appearance and dragging (v4.6)
 
 - **Original-size extractor:** The main panel is back to **440px wide** and
   **88vh tall**; the minimized width is **300px**. It remains responsive
@@ -21,6 +21,10 @@
 - **Position memory:** The window remembers its position across rescans
   and page reloads. Position is clamped after dragging, resizing the browser,
   or minimizing/restoring so the extractor remains accessible.
+- **Top-right minimize anchor:** Minimize and restore around the panel's
+  **top-right corner** (keeping its right edge and top coordinate fixed
+  whenever the viewport allows), rather than leaving the top-left corner
+  fixed. Dragging continues to work when minimized.
 
 The chosen opacity and window coordinates are browser-local UI preferences.
 No credit-report data is stored with these controls.
@@ -54,6 +58,25 @@ The red verification notice is displayed only on accounts classified as
 Run `node test-negative-classification.js` for regression coverage.
 
 Takes negative accounts and inquiries from Credit Repair Cloud in one click.
+
+## Compact inquiry date filter (v4.6)
+
+In **INQUIRIES**, the previous always-visible date picker has become a
+compact **Filter by date** button with a short inquiry count alongside it.
+Click the button to reveal a modern, bounded date popover.
+
+- Choose an exclusive cutoff date, then click **Apply**. Example:
+  **January 1, 2025** shows **December 2024 and older** inquiries.
+- Date changes inside the popover are **drafts**. Inquiries (including
+  copied text) are not changed until **Apply** is clicked.
+- **Cancel**, **Escape**, and clicking outside close the popover without
+  applying the draft. **Show all** clears the saved cutoff.
+- The popover overlays the list rather than taking up a large permanent row.
+  It does not auto-focus the date input, so navigating the inquiry list is
+  unaffected. The **NEW** and **OPEN ACCOUNTS** subtabs remain independent.
+
+Run `node test-inquiry-date-popover.js` to test the Apply/Cancel/Clear,
+outside-click, Escape, and list-focus behavior.
 
 ## Personal Info: previous address dates (v4.3)
 
