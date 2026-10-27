@@ -1,5 +1,23 @@
 # TUBOL-CATCHER
 
+## Inquiry date filter resets on every scan (v5.1)
+
+The regular **INQUIRIES → Filter by date** cutoff starts on **Show all**
+each time you click **CLICK ME!** to process a report. A date selected with
+**Apply** remains active for the current report and affects its visible and
+copied inquiries; the next scan clears it before extracting the new report.
+
+The full-page workspace uses the active report's date filter, and its
+**Settings → Show regular inquiries BEFORE** option can change that current
+cutoff. The date is **not saved as a persistent browser preference**, so
+reloading Credit Repair Cloud also starts unfiltered. Any cutoff stored by
+earlier versions is cleared automatically. **NEW** inquiries and open-account
+subtabs remain unaffected.
+
+Run `node test-inquiry-date-reset.js` and
+`node test-inquiry-date-popover.js` to validate reset behavior and the
+current-report Apply/Cancel/Clear workflow.
+
 ## Full-page report workspace (v5.0)
 
 ### Choose how to view the report
@@ -27,7 +45,8 @@ whether to copy connected inquiries in the regular and NEW tabs, open-account
 names-only display, exclusive inquiry date cutoff, and opacity in 1% steps.
 Changes update the full-page display and **Copy current view** immediately.
 While the originating Credit Repair Cloud tab is open, they also update its
-extractor and persist the same browser preferences.
+extractor and persist the other browser preferences. The inquiry cutoff is
+temporary for the current scan and resets on the next scan.
 
 The drawer also provides a searchable creditor alias manager with adding,
 reassigning/removing variations, creating/deleting custom creditors, and
@@ -206,7 +225,7 @@ Click the button to reveal a modern, bounded date popover.
 - Date changes inside the popover are **drafts**. Inquiries (including
   copied text) are not changed until **Apply** is clicked.
 - **Cancel**, **Escape**, and clicking outside close the popover without
-  applying the draft. **Show all** clears the saved cutoff.
+  applying the draft. **Show all** clears the current report's cutoff.
 - The popover overlays the list rather than taking up a large permanent row.
   It does not auto-focus the date input, so navigating the inquiry list is
   unaffected. The **NEW** and **OPEN ACCOUNTS** subtabs remain independent.
@@ -232,8 +251,8 @@ the copied inquiry text. Inquiries without usable dates are excluded while
 a cutoff is active. Use **Show all** to remove it.
 
 This is independent of the **NEW** subtab, which continues showing the last
-35 days. The chosen date is saved locally on the device, like the other
-display preferences.
+35 days. **Starting with v5.1**, the chosen date is not saved across scans:
+every new process starts with all inquiries visible.
 
 **Scanner Settings** is now wider/taller but remains viewport bounded
 (maximum 1000px wide, 88vh tall, responsive on smaller screens).

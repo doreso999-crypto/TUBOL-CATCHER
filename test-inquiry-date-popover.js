@@ -79,7 +79,8 @@ assert.equal(test.dateFilterPopover.hidden,true);
 assert.equal(test.getCutoff(),'2025-01-01');
 assert.equal(test.getResults(),'DEC,OLD');
 assert.equal(renders,2);
-assert.equal(localStorage.getItem('tubol-crc-inquiry-before-date'),'2025-01-01');
+assert.equal(localStorage.getItem('tubol-crc-inquiry-before-date'),null,
+    'Applied date must stay in memory instead of carrying into another report');
 assert(test.dateFilterButtonLabel.textContent.includes('2025'));
 assert.equal(test.dateFilterSummary.textContent,'2 of 4 inquiries');
 // Outside click dismisses a draft without applying changes.
@@ -108,4 +109,4 @@ assert(source.includes("dateFilterWrap.hidden = view !== 'inquiries';"),
 assert(source.includes("if (view !== 'inquiries') setInquiryDatePopoverOpen(false);"),
     'Navigating away should close an open date popover');
 assert(source.includes('#crc-inquiry-date-popover[hidden] { display: none !important; }'));
-console.log('PASS: date popover opens on demand, Apply/Cancel/Clear, copy sync, outside/Escape close, no focus stealing');
+console.log('PASS: per-report date popover Apply/Cancel/Clear, non-persistence, copy sync, outside/Escape close');
