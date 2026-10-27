@@ -2536,6 +2536,26 @@ Controls padding, font, spacing, and appearance for all 3
         }
         return [...groups.values()];
     }
+    function pickPriorityBureauValue(bureauFields, names, preferred) {
+        for (const bureauName of getBureauPriorityOrder(preferred)) {
+            const code = CRC_BUREAUS.find(item => item.field === bureauName)?.code;
+            const fields = bureauFields?.[code] || {};
+            const entry = Object.entries(fields).find(([label]) =>
+                names.some(name => label.trim().toLowerCase() === name.toLowerCase()));
+            if (entry && entry[1] && !['-','--'].includes(entry[1])) return entry[1];
+        }
+        return '';
+    }
+    function updateNegativePreferredValues(items, preferred) {
+        (items || []).forEach(item => {
+            if (!item.bureau_fields) return;
+            item.account_number = pickPriorityBureauValue(item.bureau_fields,
+                ['Account #','Account Number','Account No'],preferred);
+            item.balance = pickPriorityBureauValue(item.bureau_fields,['Balance','Balance Owed'],preferred);
+            item.late_payment = pickPriorityBureauValue(item.bureau_fields,['Late Payment Status'],preferred);
+            item.comments = pickPriorityBureauValue(item.bureau_fields,['Comments'],preferred);
+        });
+    }
     function formatBureauValueLines(groups) {
         return groups.map(entry => entry.value + '(' + entry.bureaus.join('-') + ')');
     }
@@ -3555,6 +3575,7 @@ function extractInquiries() {
 
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
+        const bankruptcyTables = extractBankruptcyTables();
         let openAccountsData = extractOpenAccounts();
         let openAccounts = openAccountsData.list;
         let openAccountsByBureau = openAccountsData.byBureau;
@@ -3615,49 +3636,118 @@ function extractInquiries() {
         let results = panel.querySelector("#crc-results");
         let copyTextNegative = "";
 
-        const resultsFrag = document.createDocumentFragment();
+        function renderNegativeStandard() {
+            updateNegativePreferredValues(negativeData,crcBureauPriority);
+            copyTextNegative = '';
+            results.replaceChildren();
+            const resultsFrag = document.createDocumentFragment();
 
-        bankruptcies.forEach(item => {
-            let entry = `${item.type}\n${item.reference}\n${item.date}\n${item.status}\n\n`;
-            copyTextNegative += entry;
+            bankruptcies.forEach(item => {
+                let entry = `${item.type}\n${item.reference}\n${item.date}\n${item.status}\n\n`;
+                copyTextNegative += entry;
 
-            const row = document.createElement('div');
-            const h = document.createElement('b'); h.textContent = 'Bankruptcy';
-            const r1 = document.createElement('div'); r1.textContent = item.reference;
-            const r2 = document.createElement('div'); r2.textContent = item.date;
-            const r3 = document.createElement('div'); r3.textContent = item.status;
-            row.appendChild(h);
-            row.appendChild(r1);
-            row.appendChild(r2);
-            row.appendChild(r3);
-            resultsFrag.appendChild(row);
+                const row = document.createElement('div');
+                const h = document.createElement('b'); h.textContent = 'Bankruptcy';
+                const r1 = document.createElement('div'); r1.textContent = item.reference;
+                const r2 = document.createElement('div'); r2.textContent = item.date;
+                const r3 = document.createElement('div'); r3.textContent = item.status;
+                row.appendChild(h);
+                row.appendChild(r1);
+                row.appendChild(r2);
+                row.appendChild(r3);
+                resultsFrag.appendChild(row);
+            });
+
+            negativeData.forEach(item => {
+                let entry = `${item.account}\n${item.account_number}\n${item.balance}\n${item.bureau_display} ${item.account_type}\n\n`;
+                copyTextNegative += entry;
+
+                const row = document.createElement('div');
+                const h = document.createElement('b'); h.textContent = item.account;
+                const r1 = document.createElement('div'); r1.textContent = item.account_number;
+                const r2 = document.createElement('div'); r2.textContent = item.balance;
+                const r3 = document.createElement('div');
+                r3.textContent = `${item.bureau_display} ${item.account_type}`;
+                if (item.warning) {
+                    const warn = document.createElement('b');
+                    warn.style.color = 'red';
+                    warn.textContent = item.warning;
+                    r3.appendChild(document.createElement('br'));
+                    r3.appendChild(warn);
+                }
+                row.appendChild(h);
+                row.appendChild(r1);
+                row.appendChild(r2);
+                row.appendChild(r3);
+                resultsFrag.appendChild(row);
+            });
+
+            results.appendChild(resultsFrag);
+        }
+        renderNegativeStandard();
+
+        const disputeCategories = buildDisputedCategories(negativeData, bankruptcyTables);
+        const negativeStandardView = panel.querySelector('#crc-negative-standard-view');
+        const negativeDisputedView = panel.querySelector('#crc-negative-disputed-view');
+        const disputeResults = panel.querySelector('#crc-dispute-results');
+        const standardModeButton = panel.querySelector('#crc-negative-mode-standard');
+        const disputedModeButton = panel.querySelector('#crc-negative-mode-disputed');
+        const disputeTabButtons = [...panel.querySelectorAll('[data-crc-dispute-category]')];
+        const categoryLabels = { delete: 'DELETE', updated: 'UPDATED', bankruptcy: 'BANKRUPTCY' };
+        let disputedModeActive = false;
+        let disputeCategory = 'delete';
+        let copyTextDisputed = '';
+
+        Object.keys(disputeCategories).forEach(key => {
+            panel.querySelector('[data-crc-count="' + key + '"]').textContent = disputeCategories[key].length;
         });
-
-        negativeData.forEach(item => {
-            let entry = `${item.account}\n${item.account_number}\n${item.balance}\n${item.bureau_display} ${item.account_type}\n\n`;
-            copyTextNegative += entry;
-
-            const row = document.createElement('div');
-            const h = document.createElement('b'); h.textContent = item.account;
-            const r1 = document.createElement('div'); r1.textContent = item.account_number;
-            const r2 = document.createElement('div'); r2.textContent = item.balance;
-            const r3 = document.createElement('div');
-            r3.textContent = `${item.bureau_display} ${item.account_type}`;
-            if (item.warning) {
-                const warn = document.createElement('b');
-                warn.style.color = 'red';
-                warn.textContent = item.warning;
-                r3.appendChild(document.createElement('br'));
-                r3.appendChild(warn);
+        function negativeCopyButtonLabel() {
+            return disputedModeActive ? 'COPY ' + categoryLabels[disputeCategory] + ' ACCOUNTS' : 'COPY NEGATIVE ACCOUNTS';
+        }
+        function renderDisputedCategory() {
+            const items = disputeCategories[disputeCategory];
+            disputeResults.replaceChildren();
+            copyTextDisputed = items.map(formatDisputedAccountCopy).join('\n\n');
+            if (!items.length) {
+                const empty = document.createElement('div');
+                empty.className = 'crc-dispute-empty';
+                empty.textContent = 'No ' + categoryLabels[disputeCategory].toLowerCase() + ' records found.';
+                disputeResults.appendChild(empty);
+            } else {
+                const fragment = document.createDocumentFragment();
+                items.forEach(item => fragment.appendChild(renderDisputeAccountCard(item)));
+                disputeResults.appendChild(fragment);
             }
-            row.appendChild(h);
-            row.appendChild(r1);
-            row.appendChild(r2);
-            row.appendChild(r3);
-            resultsFrag.appendChild(row);
+            disputeTabButtons.forEach(button => {
+                const selected = button.dataset.crcDisputeCategory === disputeCategory;
+                button.classList.toggle('active', selected);
+                button.setAttribute('aria-selected', String(selected));
+            });
+            panel.querySelector('#crc-copy-page-1').textContent = negativeCopyButtonLabel();
+        }
+        function setNegativeMode(active) {
+            disputedModeActive = active;
+            negativeStandardView.hidden = active;
+            negativeDisputedView.hidden = !active;
+            standardModeButton.classList.toggle('active', !active);
+            disputedModeButton.classList.toggle('active', active);
+            standardModeButton.setAttribute('aria-selected', String(!active));
+            disputedModeButton.setAttribute('aria-selected', String(active));
+            if (active) renderDisputedCategory();
+            else panel.querySelector('#crc-copy-page-1').textContent = negativeCopyButtonLabel();
+        }
+        standardModeButton.addEventListener('click', () => setNegativeMode(false));
+        disputedModeButton.addEventListener('click', () => setNegativeMode(true));
+        disputeTabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                disputeCategory = button.dataset.crcDisputeCategory;
+                renderDisputedCategory();
+            });
         });
-
-        results.appendChild(resultsFrag);
+        // Render category counts and copy content without changing the
+        // default initial ALL ACCOUNTS experience.
+        renderDisputedCategory();
+        setNegativeMode(false);
 
         // ========================================
         // PAGE 3 - PREVIOUS ADDRESSES
@@ -4196,6 +4286,15 @@ function extractInquiries() {
         const copyConnectedInput = panel.querySelector('#crc-copy-connected-inquiries');
         const copyConnectedNewInput = panel.querySelector('#crc-copy-connected-new');
         const openNamesOnlyInput = panel.querySelector('#crc-open-names-only');
+        const bureauPriorityInput = panel.querySelector('#crc-bureau-priority');
+        bureauPriorityInput.value = crcBureauPriority;
+        bureauPriorityInput.addEventListener('change', () => {
+            crcBureauPriority = getBureauPriorityOrder(bureauPriorityInput.value)[0];
+            try { localStorage.setItem(CRC_BUREAU_PRIORITY_KEY, crcBureauPriority); }
+            catch (_) { /* Selection remains active for this session. */ }
+            renderNegativeStandard();
+            // Disputed Mode uses the untouched per-bureau field data.
+        });
         const panelOpacityInput = panel.querySelector('#crc-panel-opacity');
         const panelOpacityValue = panel.querySelector('#crc-panel-opacity-value');
         panelOpacityInput.value = String(crcPanelOpacity);
@@ -4383,9 +4482,8 @@ function extractInquiries() {
         });
 
         copyButtons[0].onclick = function() {
-            navigator.clipboard.writeText(copyTextNegative);
-            this.textContent = "✓ COPIED";
-            setTimeout(() => { this.textContent = "COPY NEGATIVE ACCOUNTS"; }, 1500);
+            copyAccountText(disputedModeActive ? copyTextDisputed : copyTextNegative,
+                this, negativeCopyButtonLabel);
         };
 
         copyButtons[1].onclick = function() {
