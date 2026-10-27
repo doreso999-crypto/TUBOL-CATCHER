@@ -1775,6 +1775,7 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
     display:flex; align-items:center; justify-content:space-between; gap:12px;
     flex-wrap:wrap; margin:0 0 16px;
 }
+.crc-preview-subnav[hidden] { display:none !important; }
 .crc-preview-layout-control { display:inline-flex; gap:3px; padding:4px;
     background:#252a30; border:1px solid #464e59; border-radius:11px; }
 .crc-preview-layout-btn { border:0; border-radius:7px; background:transparent;
