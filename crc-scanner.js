@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.0
+// @version      5.1
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -69,12 +69,15 @@
     let crcCopyConnectedInquiries = loadCrcBoolSetting(CRC_COPY_CONNECTED_INQUIRIES_KEY, false);
     let crcCopyConnectedNew = loadCrcBoolSetting(CRC_COPY_CONNECTED_NEW_KEY, true);
     let crcOpenNamesOnly = loadCrcBoolSetting(CRC_OPEN_NAMES_ONLY_KEY, false);
-    // Blank means all inquiries; YYYY-MM-DD is an exclusive upper bound.
+    // Inquiry cutoff is intentionally per scan, not a saved global preference.
+    // Drop any cutoff persisted by older versions so a new client starts at Show all.
     let crcInquiryBeforeDate = '';
-    try {
-        const saved = localStorage.getItem(CRC_INQUIRY_BEFORE_DATE_KEY) || '';
-        if (/^\d{4}-\d{2}-\d{2}$/.test(saved)) crcInquiryBeforeDate = saved;
-    } catch (_) { /* Date selection remains available this session. */ }
+    function resetInquiryDateForNewScan() {
+        crcInquiryBeforeDate = '';
+        try { localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY); }
+        catch (_) { /* In-memory filter still resets. */ }
+    }
+    resetInquiryDateForNewScan();
     function loadCrcDisplayMode() {
         try { return localStorage.getItem(CRC_DISPLAY_KEY) === 'legacy' ? 'legacy' : 'modern'; }
         catch (_) { return 'modern'; }
@@ -4940,19 +4943,14 @@ function extractInquiries() {
                     return;
                 }
             }
+            // Keep the cutoff only for this report. A new scan always starts unfiltered.
             crcInquiryBeforeDate = selected;
-            try {
-                if (selected) localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY, selected);
-                else localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY);
-            } catch (_) { /* Works for the current session. */ }
             refreshRegularInquiryDateFilter();
             setInquiryDatePopoverOpen(false);
         });
         dateFilterClear.addEventListener('click', () => {
             dateFilterInput.value = '';
             crcInquiryBeforeDate = '';
-            try { localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY); }
-            catch (_) { /* Works for the current session. */ }
             refreshRegularInquiryDateFilter();
             setInquiryDatePopoverOpen(false);
         });
@@ -5502,12 +5500,10 @@ function extractInquiries() {
                             opacity: ['#crc-panel-opacity','input']
                         };
                         if (key === 'beforeDate') {
+                            // The full-page Settings drawer shares this scan's
+                            // filter but never persists it into another process.
                             crcInquiryBeforeDate = value;
                             dateFilterInput.value = value;
-                            try {
-                                if (value) localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY,value);
-                                else localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY);
-                            } catch (_) { /* Current session still works. */ }
                             refreshRegularInquiryDateFilter();
                             return;
                         }
@@ -5577,6 +5573,9 @@ function extractInquiries() {
         scanButton.onclick = async function() {
             if (this.disabled) return;
             this.disabled = true;
+            // A new process must not inherit the previous client's date filter.
+            // Reset before extraction, even if a prior report panel is still open.
+            resetInquiryDateForNewScan();
             const prevText = this.textContent;
             this.textContent = 'Scanning...';
             try {
