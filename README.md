@@ -1,6 +1,45 @@
 # TUBOL-CATCHER
 
-## Full-page report preview (v4.9)
+## Full-page report workspace (v5.0)
+
+### Choose how to view the report
+
+In the new browser tab, use the compact **Grid / Table / List** selector:
+
+- **Grid** — responsive multi-column cards, ideal for browsing accounts and
+  opening bureau details. This is the default.
+- **Table** — structured, horizontally scrollable columns for faster comparison
+  of creditors, balances, account numbers, inquiry dates, statuses, and bureau
+  values. Works across Negative, Disputed Mode, Inquiries, Open Accounts, NEW,
+  and Personal Info sections.
+- **List** — denser, vertically stacked cards when you want to scan records
+  quickly. The selected view is remembered in browser preferences.
+
+The data shown in each layout is the same extracted report; changing layouts
+does not modify the underlying report or copy settings.
+
+### Settings work in the new tab
+
+Click **Settings** in the top-right corner of the full-page workspace. The
+drawer includes the same report preferences as the floating extractor:
+preferred bureau (Equifax / Experian / TransUnion), modern/legacy display,
+whether to copy connected inquiries in the regular and NEW tabs, open-account
+names-only display, exclusive inquiry date cutoff, and opacity in 1% steps.
+Changes update the full-page display and **Copy current view** immediately.
+While the originating Credit Repair Cloud tab is open, they also update its
+extractor and persist the same browser preferences.
+
+The drawer also provides a searchable creditor alias manager with adding,
+reassigning/removing variations, creating/deleting custom creditors, and
+restoring defaults. In the new-tab grid/list, right-click an inquiry or open
+account to open Settings prefilled with that name. Confirm alias associations
+before saving. The same browser-local alias registry is shared with the small
+extractor.
+
+Note: The new tab remains a snapshot of *extracted report records*; it does
+not automatically fetch rescans or follow subsequent page navigation. Reopen
+the preview after scanning a different report. The layout and settings changes
+do not upload credit-report contents or store those contents in localStorage.
 
 Click the **↗ Open full-page report preview** button in the extractor's top
 bar, beside **Minimize**. A separate browser tab opens with a spacious,
@@ -25,8 +64,9 @@ settings, reopen the preview using the ↗ button. Close the preview tab
 normally when finished. If the browser blocks it, allow pop-ups for Credit
 Repair Cloud.
 
-Run `node test-full-page-preview.js` to validate the page layout,
-navigation, copy behavior, expandable bureau lists, and snapshot isolation.
+Run `node test-full-page-preview.js` to validate Grid/Table/List
+navigation, Settings updates, priority, copy filtering, date selection,
+expandable bureau lists, and report-data isolation.
 
 ## Safer extractor window (v4.8)
 
