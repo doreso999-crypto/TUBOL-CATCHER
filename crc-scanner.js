@@ -3431,24 +3431,69 @@ function extractInquiries() {
         // independent and continues showing inquiries from the last 35 days.
         const dateFilterWrap = document.createElement('div');
         dateFilterWrap.id = 'crc-inquiry-date-filter';
+
+        // The toolbar is collapsed by default and does not take focus from
+        // the inquiries or change the list while someone edits the date.
+        const dateFilterToggle = document.createElement('button');
+        dateFilterToggle.type = 'button';
+        dateFilterToggle.id = 'crc-inquiry-date-toggle';
+        dateFilterToggle.setAttribute('aria-haspopup', 'dialog');
+        dateFilterToggle.setAttribute('aria-expanded', 'false');
+        dateFilterToggle.setAttribute('aria-controls', 'crc-inquiry-date-popover');
+        dateFilterToggle.title = 'Set a cutoff for INQUIRIES only';
+        const dateFilterIcon = document.createElement('span');
+        dateFilterIcon.setAttribute('aria-hidden', 'true');
+        dateFilterIcon.textContent = '▦';
+        const dateFilterButtonLabel = document.createElement('span');
+        dateFilterButtonLabel.className = 'crc-date-button-label';
+        dateFilterToggle.appendChild(dateFilterIcon);
+        dateFilterToggle.appendChild(dateFilterButtonLabel);
+
+        const dateFilterSummary = document.createElement('div');
+        dateFilterSummary.id = 'crc-inquiry-date-summary';
+        dateFilterSummary.setAttribute('aria-live', 'polite');
+
+        const dateFilterPopover = document.createElement('div');
+        dateFilterPopover.id = 'crc-inquiry-date-popover';
+        dateFilterPopover.setAttribute('role', 'dialog');
+        dateFilterPopover.setAttribute('aria-label', 'Inquiry date filter');
+        dateFilterPopover.hidden = true;
         const dateFilterLabel = document.createElement('label');
         dateFilterLabel.htmlFor = 'crc-inquiry-before-date';
-        dateFilterLabel.textContent = 'Show inquiries BEFORE';
+        dateFilterLabel.textContent = 'Show inquiries before';
         const dateFilterInput = document.createElement('input');
         dateFilterInput.type = 'date';
         dateFilterInput.id = 'crc-inquiry-before-date';
         dateFilterInput.value = crcInquiryBeforeDate;
-        dateFilterInput.title = 'Exclusive cutoff: select Jan 1, 2025 to show Dec 2024 and older';
+        dateFilterInput.title = 'The selected date itself is excluded';
+        const dateFilterHelp = document.createElement('p');
+        dateFilterHelp.className = 'crc-date-help';
+        dateFilterHelp.textContent = 'Example: Jan 1, 2025 shows Dec 2024 and earlier. The selected date is excluded.';
+        const dateFilterActions = document.createElement('div');
+        dateFilterActions.className = 'crc-date-popover-actions';
         const dateFilterClear = document.createElement('button');
         dateFilterClear.type = 'button';
         dateFilterClear.id = 'crc-inquiry-date-clear';
         dateFilterClear.textContent = 'Show all';
-        const dateFilterSummary = document.createElement('div');
-        dateFilterSummary.id = 'crc-inquiry-date-summary';
-        dateFilterWrap.appendChild(dateFilterLabel);
-        dateFilterWrap.appendChild(dateFilterInput);
-        dateFilterWrap.appendChild(dateFilterClear);
+        const dateFilterApply = document.createElement('button');
+        dateFilterApply.type = 'button';
+        dateFilterApply.id = 'crc-inquiry-date-apply';
+        dateFilterApply.className = 'crc-date-apply';
+        dateFilterApply.textContent = 'Apply';
+        const dateFilterCancel = document.createElement('button');
+        dateFilterCancel.type = 'button';
+        dateFilterCancel.id = 'crc-inquiry-date-cancel';
+        dateFilterCancel.textContent = 'Cancel';
+        dateFilterActions.appendChild(dateFilterClear);
+        dateFilterActions.appendChild(dateFilterCancel);
+        dateFilterActions.appendChild(dateFilterApply);
+        dateFilterPopover.appendChild(dateFilterLabel);
+        dateFilterPopover.appendChild(dateFilterInput);
+        dateFilterPopover.appendChild(dateFilterHelp);
+        dateFilterPopover.appendChild(dateFilterActions);
+        dateFilterWrap.appendChild(dateFilterToggle);
         dateFilterWrap.appendChild(dateFilterSummary);
+        dateFilterWrap.appendChild(dateFilterPopover);
         inquiriesDiv.appendChild(dateFilterWrap);
 
         const inquiriesView = document.createElement('div');
