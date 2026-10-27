@@ -4155,6 +4155,180 @@ function extractInquiries() {
         put(layout,make('footer','crc-preview-footer',
             'Private, local snapshot. This tab does not automatically refresh; reopen it from TUBOL CATCHER after rescanning or changing settings. No report values are placed in browser storage or sent to a server by the preview.'));
 
+        // Render the report arrays directly, so settings really change this
+        // workspace (not just the original floating panel). Older callers
+        // without the arrays keep the original cloned snapshot.
+        function fillPreviewNegative() {
+            if (!Array.isArray(snapshot.negativeData)) return;
+            updateNegativePreferredValues(snapshot.negativeData,previewSettings.bureauPriority);
+            standardList.replaceChildren();
+            for (const item of snapshot.bankruptcies||[]) {
+                const card=put(standardList,make('div'));
+                put(card,make('b','','Bankruptcy'));
+                [item.reference,item.date,item.status].forEach(x=>put(card,make('div','',String(x||''))));
+            }
+            for (const item of snapshot.negativeData) {
+                const card=put(standardList,make('div'));
+                put(card,make('b','',item.account||'(No creditor)'));
+                put(card,make('div','',item.account_number||''));
+                put(card,make('div','',item.balance||''));
+                put(card,make('div','',String(item.bureau_display||'')+' '+String(item.account_type||'')));
+                if (item.warning) put(card,make('div','crc-dispute-type',item.warning));
+            }
+        }
+        function previewInquiryItems(mode) {
+            if (!Array.isArray(snapshot.inquiries)) return null;
+            return mode==='new' ? (snapshot.newInquiries||[])
+                : filterInquiriesBeforeDate(snapshot.inquiries,previewSettings.beforeDate);
+        }
+        function openAliasFromPreview(value) {
+            aliasName.value=String(value||'').trim();
+            setSettingsVisible(true);
+            aliasName.focus();
+        }
+        function fillPreviewInquiries(container,mode) {
+            const items=previewInquiryItems(mode);
+            if (!items) return;
+            container.replaceChildren();
+            const modern=previewSettings.displayMode==='modern';
+            for(const bureau of [{name:'Experian',key:'experian',code:'EXP'},
+                                  {name:'Equifax',key:'equifax',code:'EQU'},
+                                  {name:'TransUnion',key:'transunion',code:'TU'}]) {
+                const subset=items.filter(item=>item[bureau.key]);
+                const section=put(container,make('div','crc-inquiry-section'));
+                const heading=put(section,make('div','crc-inquiry-bureau',bureau.name+' ('+subset.length+')'));
+                heading.setAttribute('role','button');heading.setAttribute('tabindex','0');
+                heading.setAttribute('aria-expanded','true');
+                const list=put(section,make('div','crc-inquiry-items'));
+                const toggle=()=>{
+                    const collapsed=section.classList.toggle('crc-collapsed');
+                    heading.setAttribute('aria-expanded',String(!collapsed));
+                };
+                heading.addEventListener('click',toggle);
+                heading.addEventListener('keydown',event=>{
+                    if(event.key==='Enter'||event.key===' ') {event.preventDefault();toggle();}
+                });
+                if(!subset.length) put(list,make('div','crc-inquiry-none','No inquiries'));
+                for(const item of subset) {
+                    const connected=Boolean(item.connectedToOpen);
+                    const row=put(list,make('div','crc-inquiry-row '+(connected?'crc-inq-connected':'crc-inq-unconnected')));
+                    const top=put(row,make('div','crc-inquiry-top-row'));
+                    const name=String(item.creditor||'(No creditor)').trim();
+                    put(top,make('div','crc-inquiry-creditor',modern?
+                        '- '+name.toUpperCase()+(item.date?' '+item.date:'')+'('+bureau.code+')':name));
+                    put(top,make('div','crc-inquiry-status',
+                        /already disputed/i.test(item.action||'')?'AD':'ND'));
+                    if(!modern) put(row,make('div','crc-inquiry-date',item.date||''));
+                    row.title='Right-click to manage creditor alias';
+                    row.addEventListener('contextmenu',event=>{
+                        event.preventDefault();openAliasFromPreview(name);
+                    });
+                }
+            }
+        }
+        function fillPreviewOpen() {
+            if (!Array.isArray(snapshot.openAccounts)) return;
+            openList.replaceChildren();
+            for(const item of snapshot.openAccounts) {
+                const card=put(openList,make('div','crc-open-account'));
+                put(card,make('b','',item.account||'(No creditor)'));
+                if (!previewSettings.openNamesOnly) {
+                    put(card,make('div','',item.account_number||''));
+                    put(card,make('div','',item.balance||''));
+                    put(card,make('div','',(item.bureau_display||'')+' '+(item.account_type||'')));
+                }
+                card.addEventListener('contextmenu',event=>{
+                    event.preventDefault();openAliasFromPreview(item.account);
+                });
+            }
+            if (!snapshot.openAccounts.length)
+                put(openList,make('div','crc-dispute-empty','No open accounts'));
+        }
+        function fillPreviewPersonal(container,groups,empty) {
+            if (!groups) return;
+            container.replaceChildren();
+            for (const bureau of [{name:'Experian',key:'EX',code:'EXP'},
+                                  {name:'Equifax',key:'EQU',code:'EQU'},
+                                  {name:'TransUnion',key:'TU',code:'TU'}]) {
+                const items=groups[bureau.key]||[];
+                const section=put(container,make('div','crc-inquiry-section'));
+                put(section,make('div','crc-inquiry-bureau',bureau.name+' ('+items.length+')'));
+                const list=put(section,make('div','crc-inquiry-items'));
+                if (!items.length) put(list,make('div','crc-inquiry-none','No '+empty));
+                for (const item of items) {
+                    const name=String(item.address||'').trim();
+                    const date=String(item.date||'').trim();
+                    const text=previewSettings.displayMode==='modern'
+                        ? '- '+name.toUpperCase()+(date?' '+date:'')+'('+bureau.code+')'
+                        : name+(date?' '+date:'');
+                    put(list,make('div','crc-previous-address-card',text));
+                }
+            }
+        }
+        function refreshPreviewContent() {
+            fillPreviewNegative();
+            fillPreviewInquiries(regularList,'inquiries');
+            fillPreviewInquiries(newList,'new');
+            fillPreviewOpen();
+            fillPreviewPersonal(addressesList,snapshot.previousAddresses,'previous addresses');
+            fillPreviewPersonal(employersList,snapshot.employers,'employers');
+            const description=inquiryPanes.inquiries.querySelector('.crc-preview-intro');
+            if (description) description.textContent=previewSettings.beforeDate
+                ? 'Showing inquiries strictly before '+previewSettings.beforeDate+'. NEW remains independent.'
+                : 'Showing all extracted inquiries.';
+            if (displayLayout==='table') renderPreviewTable();
+        }
+        function previewInquiryCopy(items,includeConnected) {
+            if (!items) return '';
+            let result='';
+            const modern=previewSettings.displayMode==='modern';
+            for (const bureau of [{name:'Experian',key:'experian',code:'EXP'},
+                {name:'Equifax',key:'equifax',code:'EQU'},
+                {name:'TransUnion',key:'transunion',code:'TU'}]) {
+                const filtered=items.filter(x=>x[bureau.key]&&(includeConnected||!x.connectedToOpen));
+                if (!modern) {
+                    result+=bureau.name.toUpperCase()+':\n\n';
+                    if(!filtered.length) result+=(includeConnected?'(No inquiries)':'(No unconnected inquiries)')+'\n\n';
+                    else result+=filtered.map(item=>'- '+String(item.creditor||'(No creditor)').toLowerCase()+
+                        ' '+(item.date||'')).join('\n')+'\n\n';
+                } else {
+                    result+=filtered.map(item=>'- '+String(item.creditor||'(No creditor)').toUpperCase()+
+                        (item.date?' '+item.date:'')+'('+bureau.code+')').join('\n');
+                    if (filtered.length) result+='\n';
+                }
+            }
+            return result.trim();
+        }
+        function previewPersonalCopy() {
+            if (!snapshot.previousAddresses || !snapshot.employers) return snapshot.copyPersonalInfo;
+            const modern=previewSettings.displayMode==='modern';
+            function format(groups) {
+                let lines=[];
+                for(const bureau of [{name:'Experian',key:'EX',code:'EXP'},
+                                    {name:'Equifax',key:'EQU',code:'EQU'},
+                                    {name:'TransUnion',key:'TU',code:'TU'}]) {
+                    const items=groups[bureau.key]||[];
+                    if (!modern) {
+                        lines.push(bureau.name.toUpperCase()+':');
+                        lines.push(...items.map(item=>'- '+item.address+(item.date?' '+item.date:'')));
+                    } else {
+                        lines.push(...items.map(item=>'- '+String(item.address||'').toUpperCase()+
+                            (item.date?' '+item.date:'')+'('+bureau.code+')'));
+                    }
+                }
+                return lines.join('\n').trim();
+            }
+            return [format(snapshot.previousAddresses),'EMPLOYERS:\n'+format(snapshot.employers)].join('\n\n');
+        }
+        function previewNegativeCopy() {
+            if (!Array.isArray(snapshot.negativeData)) return snapshot.copyNegative;
+            return (snapshot.bankruptcies||[]).map(x=>
+                [x.type,x.reference,x.date,x.status].join('\n'))
+                .concat(snapshot.negativeData.map(item=>
+                    [item.account,item.account_number,item.balance,
+                        (item.bureau_display||'')+' '+(item.account_type||'')].join('\n')))
+                .join('\n\n').trim();
+        }
         // Table mode renders structured data (not a screenshot or text split)
         // so every tab and subtab can be compared using readable columns.
         function currentTableModel() {
@@ -4255,12 +4429,22 @@ function extractInquiries() {
             if (displayLayout === 'table') renderPreviewTable();
         }
         function activeCopyText() {
-            if (activePage === 'personal') return snapshot.copyPersonalInfo;
-            if (activePage === 'inquiries') return inquiryMode === 'open'
-                ? snapshot.copyOpenAccounts
-                : inquiryMode === 'new' ? snapshot.copyNewInquiries : snapshot.copyInquiries;
+            if (activePage === 'personal') return previewPersonalCopy();
+            if (activePage === 'inquiries') {
+                if (inquiryMode === 'open') {
+                    if (!Array.isArray(snapshot.openAccounts)) return snapshot.copyOpenAccounts;
+                    return snapshot.openAccounts.map(item=>previewSettings.openNamesOnly
+                        ? String(item.account||'').trim()
+                        : [item.account||'',item.account_number||'',item.balance||'',
+                            (item.bureau_display||'')+' '+(item.account_type||'')].join('\n')).join('\n\n');
+                }
+                if (!Array.isArray(snapshot.inquiries)) return inquiryMode === 'new'
+                    ? snapshot.copyNewInquiries : snapshot.copyInquiries;
+                return previewInquiryCopy(previewInquiryItems(inquiryMode),
+                    inquiryMode === 'new' ? previewSettings.copyConnectedNew : previewSettings.copyConnected);
+            }
             return negativeMode === 'standard'
-                ? snapshot.copyNegative
+                ? previewNegativeCopy()
                 : (snapshot.disputeCategories[disputedCategory] || [])
                     .map(formatDisputedAccountCopy).join('\n\n');
         }
@@ -4287,6 +4471,7 @@ function extractInquiries() {
             }, 1500);
         });
 
+        refreshPreviewContent();
         selectNegativeMode(negativeMode);
         selectInquiryMode(inquiryMode);
         setDisplayLayout(displayLayout);
