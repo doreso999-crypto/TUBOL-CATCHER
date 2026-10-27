@@ -166,6 +166,14 @@ assert(source.includes('min-height: 58px;'));
 assert(source.includes('id="crc-panel-opacity" min="60" max="100" step="1"'));
 assert(!source.includes('id="crc-panel-opacity" min="60" max="100" step="5"'));
 assert(source.includes('DRAG TO MOVE'));
+assert(!source.includes('crc-close-btn'),
+    'The extractor must never expose a panel close button or close handler');
+assert(source.includes('id="crc-minimize-btn"'),
+    'Minimize/restore must remain available');
+assert(source.includes('id="crc-settings-close"'),
+    'The Settings dialog must still be independently dismissible');
+assert(source.includes('scanButton.id = "crc-scan-btn"'),
+    'The scan button should remain available');
 assert(source.includes('#crc-settings-menu .crc-settings-note { font-size: 15px;'));
 assert(source.includes('#crc-settings-menu .crc-settings-heading { font-size: 26px;'));
 assert(source.includes('#crc-negative-panel.crc-minimized .crc-stat-row-wrapper'));
@@ -179,4 +187,4 @@ assert(source.includes('dragControls.keepTopRightAnchor(before.right, before.top
     'Minimize handler must apply top-right anchoring');
 assert(source.includes('dragControls.savePosition();'),
     'Minimized/restored coordinates must persist');
-console.log('PASS: original size, 1% opacity, top-right minimize/restore, drag bounds, persistence and safe buttons');
+console.log('PASS: original size, no extractor X, minimize/restore, 1% opacity, dragging, bounds and persistence');

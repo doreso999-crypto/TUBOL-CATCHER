@@ -1,5 +1,16 @@
 # TUBOL-CATCHER
 
+## Safer extractor window (v4.8)
+
+The main extractor window no longer has an **X / Close** button, to prevent
+accidental dismissal of the extracted results. **Minimize / Restore** remains
+available and preserves the draggable top-right anchored window behavior.
+The separate **Settings** dialog still has its own close button, and the
+**CLICK ME!** scan button is unchanged.
+
+Run `node test-extractor-appearance.js` to check that the main close button
+and its event handler are absent while all other window controls remain.
+
 ## Bureau priority and Disputed Mode (v4.7)
 
 ### Preferred credit bureau in the regular Negative view

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.7
+// @version      4.8
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -416,22 +416,6 @@ const CSS_STYLES = `
 
 .crc-window-btn:active {
     transform: scale(.94);
-}
-
-
-/* =========================================================
-   CLOSE BUTTON
-   ========================================================= */
-
-#crc-close-btn {
-    background: #3a3b3c;
-    color: #e4e6eb;
-}
-
-
-#crc-close-btn:hover {
-    background: #e81123;
-    color: #ffffff;
 }
 
 
@@ -1730,7 +1714,6 @@ Controls padding, font, spacing, and appearance for all 3
             <div id="crc-drag-handle" aria-hidden="true" title="Drag to move the extractor">DRAG TO MOVE</div>
             <div id="crc-window-controls">
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
-                <button id="crc-close-btn" class="crc-window-btn" title="Close">✕</button>
             </div>
         </div>
 
@@ -4395,12 +4378,6 @@ function extractInquiries() {
                 }
             });
         }
-
-        panel.querySelector("#crc-close-btn").onclick = function() {
-            setSettingsOpen(false);
-            dragControls.destroy();
-            panel.remove();
-        };
 
         panel.querySelector("#crc-minimize-btn").onclick = function() {
             setSettingsOpen(false);
