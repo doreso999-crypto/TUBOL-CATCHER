@@ -1,5 +1,62 @@
 # TUBOL-CATCHER
 
+## Bureau priority and Disputed Mode (v4.7)
+
+### Preferred credit bureau in the regular Negative view
+
+Open **Settings → General → Negative account data priority** and select
+**Equifax first**, **Experian first**, or **TransUnion first**. Equifax remains
+the default until changed. The selected bureau is used for the single account
+number, balance, late-payment status and comments displayed/copied in the
+regular **NEGATIVE → ALL ACCOUNTS** view; the other bureaus act as fallback
+when that field is missing. Changes refresh the regular view immediately and
+are saved only as a browser preference.
+
+### NEGATIVE → DISPUTED MODE
+
+Switch from **ALL ACCOUNTS** to **DISPUTED MODE** for a compact, alphabetically
+sorted, three-category view:
+
+- **DELETE** — collection, charge-off, repossession, transferred and
+  foreclosure accounts
+- **UPDATED** — open, closed, paid, or otherwise unclassified negative
+  accounts, so no extracted negative table is silently discarded
+- **BANKRUPTCY** — bankruptcy public records and negative entries classified
+  as included in bankruptcy
+
+**Disputed Mode does not use the bureau-priority preference.** It captures
+every populated field from each reporting credit bureau within each extracted
+negative-account table, plus bankruptcy public-record tables. Each card shows
+account numbers and balances, and **Other reported data** expands to show
+additional table fields (for example, late-payment status, dates, comments).
+The **Copy** button exports only the currently selected disputed category,
+including expanded-detail data.
+
+If two bureaus report the identical account number, the value appears once
+with the two bureau tags. For example:
+
+```text
+Account number
+xxx123(exp-equ)
+xxx3545(tu)
+
+Balance
+$1,000(exp-equ)
+$250(tu)
+```
+
+Bureau tags are `exp` for Experian, `equ` for Equifax, and `tu` for
+TransUnion. Equivalent currency values such as `$1,000` and `1000.00`
+are combined. Distinct values remain separate. Missing field values are
+shown as **Not reported**, rather than fabricated.
+
+These are report-display and grouping tools, not legal determinations about
+whether an account should be deleted or updated. Verify the underlying
+report and dispute only information you reasonably believe is inaccurate.
+
+Run `node test-disputed-mode.js` to test bureau selection, grouping,
+categorized sorting, details, bankruptcy fields and copy output.
+
 ## Extractor appearance and dragging (v4.6)
 
 - **Original-size extractor:** The main panel is back to **440px wide** and
