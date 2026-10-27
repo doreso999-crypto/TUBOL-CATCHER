@@ -3807,6 +3807,18 @@ function extractInquiries() {
             return node;
         }
 
+        // Full-page controls start from the extractor's saved preferences.
+        // Only preferences (never report values) are written to localStorage.
+        const previewSettings = Object.assign({
+            bureauPriority: 'equifax',
+            displayMode: 'modern',
+            copyConnected: false,
+            copyConnectedNew: true,
+            openNamesOnly: false,
+            beforeDate: snapshot.beforeDate || '',
+            opacity: 100
+        }, snapshot.settings || {});
+
         const root = put(doc.body, make('div', 'crc-preview-page'));
         root.id = 'crc-negative-panel';
         const layout = put(root, make('main', 'crc-preview-layout'));
@@ -5044,6 +5056,57 @@ function extractInquiries() {
                     copyNewInquiries: copyTextNewInquiries,
                     copyPersonalInfo: copyTextPersonalInfo,
                     beforeDate: crcInquiryBeforeDate,
+                    negativeData,
+                    bankruptcies,
+                    inquiries,
+                    newInquiries,
+                    openAccounts,
+                    previousAddresses,
+                    employers,
+                    settings: {
+                        bureauPriority: crcBureauPriority,
+                        displayMode: crcDisplayMode,
+                        copyConnected: crcCopyConnectedInquiries,
+                        copyConnectedNew: crcCopyConnectedNew,
+                        openNamesOnly: crcOpenNamesOnly,
+                        beforeDate: crcInquiryBeforeDate,
+                        opacity: crcPanelOpacity
+                    },
+                    onSettingChange(key,value) {
+                        const controls = {
+                            bureauPriority: ['#crc-bureau-priority','change'],
+                            displayMode: ['#crc-display-mode','change'],
+                            copyConnected: ['#crc-copy-connected-inquiries','change'],
+                            copyConnectedNew: ['#crc-copy-connected-new','change'],
+                            openNamesOnly: ['#crc-open-names-only','change'],
+                            opacity: ['#crc-panel-opacity','input']
+                        };
+                        if (key === 'beforeDate') {
+                            crcInquiryBeforeDate = value;
+                            dateFilterInput.value = value;
+                            try {
+                                if (value) localStorage.setItem(CRC_INQUIRY_BEFORE_DATE_KEY,value);
+                                else localStorage.removeItem(CRC_INQUIRY_BEFORE_DATE_KEY);
+                            } catch (_) { /* Current session still works. */ }
+                            refreshRegularInquiryDateFilter();
+                            return;
+                        }
+                        const config = controls[key];
+                        if (!config) return;
+                        const input = panel.querySelector(config[0]);
+                        if (!input) return;
+                        if (input.type === 'checkbox') input.checked = Boolean(value);
+                        else input.value = String(value);
+                        input.dispatchEvent(new Event(config[1],{bubbles:true}));
+                    },
+                    onAliasChanged() {
+                        inquiries.forEach(item => {
+                            item.connectedToOpen = isInquiryConnectedToOpenAccount(
+                                item.creditor,item.bureauKey,openAccountsByBureau);
+                        });
+                        renderAliasSettings();
+                        updateInquiryAliasHighlights();
+                    },
                     activePage: buttons[2].classList.contains('active') ? 'personal'
                         : buttons[1].classList.contains('active') ? 'inquiries' : 'negative',
                     negativeMode: disputedModeActive ? 'disputed' : 'standard',
