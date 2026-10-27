@@ -236,6 +236,7 @@ assert.equal(table.rows[0][0],'Example Bank');
 assert.equal(table.rows[0][1],'ex008');
 preview.selectPage('inquiries');
 preview.selectInquiryMode('inquiries');
+preview.applySetting('beforeDate','');
 table=preview.currentTableModel();
 assert.equal(table.rows.length,2);
 assert(!preview.activeCopyText().includes('CONNECTED'));
