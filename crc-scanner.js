@@ -4068,6 +4068,9 @@ function extractInquiries() {
             pages[name].setAttribute('role', 'tabpanel');
             mainTabs.set(name, makeTab(nav, pageLabels[name], () => selectPage(name)));
         });
+        const tableModeNav = put(layout,make('nav','crc-preview-subnav'));
+        tableModeNav.hidden=true;
+        tableModeNav.setAttribute('aria-label','Table section filters');
         const tablePane = makePane(layout,'crc-preview-table-pane');
         const tableHost = put(tablePane,make('div','crc-preview-table-wrap'));
 
@@ -4103,7 +4106,10 @@ function extractInquiries() {
         function selectDisputedCategory(name) {
             disputedCategory = name;
             markSelected(disputeButtons, name);
-            if (displayLayout === 'table' && activePage === 'negative') renderPreviewTable();
+            if (displayLayout === 'table' && activePage === 'negative') {
+                renderTableSubnav();
+                renderPreviewTable();
+            }
             disputeContent.replaceChildren();
             const items = snapshot.disputeCategories[name] || [];
             if (!items.length) {
@@ -4119,7 +4125,10 @@ function extractInquiries() {
             markSelected(negativeTabs,name);
             for (const [key,pane] of Object.entries(negativePanes)) pane.hidden = key !== name;
             if (name === 'disputed') selectDisputedCategory(disputedCategory);
-            if (displayLayout === 'table' && activePage === 'negative') renderPreviewTable();
+            if (displayLayout === 'table' && activePage === 'negative') {
+                renderTableSubnav();
+                renderPreviewTable();
+            }
         }
 
         // INQUIRIES: separate regular, open-account and new lists. Filters and
@@ -4150,7 +4159,10 @@ function extractInquiries() {
         function selectInquiryMode(name) {
             inquiryMode = name;
             markSelected(inquiryTabs,name);
-            if (displayLayout === 'table' && activePage === 'inquiries') renderPreviewTable();
+            if (displayLayout === 'table' && activePage === 'inquiries') {
+                renderTableSubnav();
+                renderPreviewTable();
+            }
             Object.entries(inquiryPanes).forEach(([key,pane]) => { pane.hidden = key !== name; });
         }
 
@@ -4403,6 +4415,31 @@ function extractInquiries() {
             }
             return {headers:['Information','Value','Date','Bureau'],rows};
         }
+        function renderTableSubnav() {
+            tableModeNav.replaceChildren();
+            tableModeNav.hidden=displayLayout!=='table';
+            if (displayLayout!=='table') return;
+            function navButton(label,active,callback) {
+                const button=put(tableModeNav,make('button','crc-preview-tab'+(active?' active':''),label));
+                button.type='button';
+                button.setAttribute('aria-pressed',String(active));
+                button.addEventListener('click',callback);
+            }
+            if(activePage==='negative') {
+                navButton('All accounts',negativeMode==='standard',()=>selectNegativeMode('standard'));
+                navButton('Disputed Mode',negativeMode==='disputed',()=>selectNegativeMode('disputed'));
+                if(negativeMode==='disputed') {
+                    put(tableModeNav,make('span','crc-preview-meta','Category:'));
+                    for(const [key,label] of Object.entries({delete:'Delete',updated:'Updated',bankruptcy:'Bankruptcy'})) {
+                        navButton(label,disputedCategory===key,()=>selectDisputedCategory(key));
+                    }
+                }
+            } else if(activePage==='inquiries') {
+                for(const [key,label] of Object.entries({inquiries:'Inquiries',open:'Open accounts',new:'New inquiries'})) {
+                    navButton(label,inquiryMode===key,()=>selectInquiryMode(key));
+                }
+            }
+        }
         function renderPreviewTable() {
             tableHost.replaceChildren();
             const model = currentTableModel();
@@ -4436,6 +4473,7 @@ function extractInquiries() {
             markSelected(mainTabs,name);
             Object.entries(pages).forEach(([key,pane]) => { pane.hidden = key !== name || displayLayout === 'table'; });
             tablePane.hidden = displayLayout !== 'table';
+            renderTableSubnav();
             if (displayLayout === 'table') renderPreviewTable();
         }
         function activeCopyText() {
