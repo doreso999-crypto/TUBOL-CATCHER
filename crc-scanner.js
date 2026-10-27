@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.6
+// @version      4.7
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -22,6 +22,21 @@
     const CRC_INQUIRY_BEFORE_DATE_KEY = 'tubol-crc-inquiry-before-date';
     const CRC_PANEL_OPACITY_KEY = 'tubol-crc-panel-opacity';
     const CRC_PANEL_POSITION_KEY = 'tubol-crc-panel-position-v1';
+    const CRC_BUREAU_PRIORITY_KEY = 'tubol-crc-negative-bureau-priority';
+    const CRC_BUREAUS = [
+        { field: 'experian', label: 'Experian', code: 'exp' },
+        { field: 'equifax', label: 'Equifax', code: 'equ' },
+        { field: 'transunion', label: 'TransUnion', code: 'tu' }
+    ];
+    function getBureauPriorityOrder(preferred) {
+        const chosen = CRC_BUREAUS.some(b => b.field === preferred) ? preferred : 'equifax';
+        return [chosen, ...['equifax','experian','transunion'].filter(x => x !== chosen)];
+    }
+    function loadBureauPriority() {
+        try { return getBureauPriorityOrder(localStorage.getItem(CRC_BUREAU_PRIORITY_KEY))[0]; }
+        catch (_) { return 'equifax'; }
+    }
+    let crcBureauPriority = loadBureauPriority();
     function clampPanelOpacity(value) {
         const n = Number(value);
         return Number.isFinite(n) ? Math.max(60, Math.min(100, Math.round(n))) : 100;
@@ -705,6 +720,112 @@ const CSS_STYLES = `
     font-weight: 600;
 }
 
+
+/* Focused negative mode navigation; preserves the regular view. */
+.crc-negative-modes, .crc-dispute-tabs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 9px 12px;
+    background: #1b1d20;
+    border-bottom: 1px solid #353a42;
+}
+.crc-negative-modes button, .crc-dispute-tabs button {
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #aeb7c3;
+    padding: 9px 11px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+}
+.crc-negative-modes button.active, .crc-dispute-tabs button.active {
+    background: #334254;
+    color: #e7f1ff;
+}
+.crc-dispute-tabs { padding: 8px 12px; gap: 4px; }
+.crc-dispute-tabs button {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 5px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.crc-dispute-tabs button span {
+    font-size: 11px;
+    padding: 2px 5px;
+    border-radius: 8px;
+    background: #434850;
+}
+#crc-negative-disputed-view[hidden], #crc-negative-standard-view[hidden] { display:none !important; }
+.crc-dispute-help {
+    margin: 10px 15px 6px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #a8b1bd;
+}
+#crc-dispute-results { padding: 8px 12px 24px; }
+.crc-dispute-card {
+    background: #24272b;
+    border: 1px solid #41464e;
+    border-radius: 10px;
+    margin: 0 0 10px;
+    padding: 13px 14px;
+}
+.crc-dispute-card h3 {
+    margin: 0 0 8px;
+    color: #f0f2f5;
+    font-size: 15px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+.crc-dispute-type {
+    display: inline-block;
+    margin-bottom: 11px;
+    border-radius: 5px;
+    padding: 3px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #39414b;
+    color: #d7e1ed;
+}
+.crc-dispute-field { margin: 0 0 11px; }
+.crc-dispute-field > strong {
+    display: block;
+    margin: 0 0 4px;
+    color: #abb6c5;
+    font-size: 12px;
+}
+.crc-dispute-value {
+    display: block;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #f0f2f5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+.crc-dispute-details {
+    border-top: 1px solid #3c4148;
+    margin-top: 9px;
+    padding-top: 10px;
+}
+.crc-dispute-details summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: #b3caff;
+    font-weight: 700;
+}
+.crc-dispute-details .crc-dispute-field:first-of-type { margin-top: 12px; }
+.crc-dispute-empty {
+    padding: 30px 16px;
+    color: #adb8c7;
+    background: #24272b;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 13px;
+}
 
 /* =========================================================
    COLLECTION WARNING
@@ -1631,6 +1752,14 @@ Controls padding, font, spacing, and appearance for all 3
                     <option value="legacy">Legacy Display — Original grouped lists</option>
                 </select>
                 <div class="crc-settings-note">List format applies to Inquiries, New Inquiries and Personal Info.</div>
+                <div class="crc-settings-section-title">Negative account data priority</div>
+                <label for="crc-bureau-priority">Preferred credit bureau</label>
+                <select id="crc-bureau-priority">
+                    <option value="equifax">Equifax first</option>
+                    <option value="experian">Experian first</option>
+                    <option value="transunion">TransUnion first</option>
+                </select>
+                <div class="crc-settings-note">Controls which bureau supplies account numbers, balances and other single-value fields in the regular Negative view. Other bureaus are used if the preferred bureau has no value. Disputed Mode always shows all reported bureaus, regardless of this setting.</div>
                 <div class="crc-settings-section-title">Extractor appearance</div>
                 <label for="crc-panel-opacity">Extractor opacity</label>
                 <div id="crc-opacity-row">
@@ -1714,7 +1843,22 @@ Controls padding, font, spacing, and appearance for all 3
         <!-- PAGE CONTENT -->
         <div id="crc-page-content">
             <div id="crc-page-1" class="crc-page">
-                <div id="crc-results"></div>
+                <div id="crc-negative-modes" class="crc-negative-modes" role="tablist" aria-label="Negative account modes">
+                    <button type="button" id="crc-negative-mode-standard" class="active" role="tab" aria-selected="true">ALL ACCOUNTS</button>
+                    <button type="button" id="crc-negative-mode-disputed" role="tab" aria-selected="false">DISPUTED MODE</button>
+                </div>
+                <div id="crc-negative-standard-view">
+                    <div id="crc-results"></div>
+                </div>
+                <div id="crc-negative-disputed-view" hidden>
+                    <div class="crc-dispute-tabs" role="tablist" aria-label="Disputed account categories">
+                        <button type="button" class="active" data-crc-dispute-category="delete" role="tab" aria-selected="true">DELETE <span data-crc-count="delete">0</span></button>
+                        <button type="button" data-crc-dispute-category="updated" role="tab" aria-selected="false">UPDATED <span data-crc-count="updated">0</span></button>
+                        <button type="button" data-crc-dispute-category="bankruptcy" role="tab" aria-selected="false">BANKRUPTCY <span data-crc-count="bankruptcy">0</span></button>
+                    </div>
+                    <p class="crc-dispute-help">All bureau values are shown. Matching values share bureau labels. Select a card's details to see the rest of its reported fields.</p>
+                    <div id="crc-dispute-results"></div>
+                </div>
             </div>
 
         <div id="crc-page-2" class="crc-page">
@@ -2350,6 +2494,83 @@ Controls padding, font, spacing, and appearance for all 3
         return '';
     }
 
+    // Capture all populated row values for every negatively reporting bureau,
+    // regardless of the preferred bureau used by the ordinary Negative view.
+    function collectNegativeBureauFields(rows, reportingBureaus) {
+        const result = {};
+        CRC_BUREAUS.forEach(bureau => {
+            // Include every bureau cell from the account's table, including
+            // bureaus that do not have a Negative toggle on this record.
+            const fields = {};
+            Object.values(rows).forEach(row => {
+                const labelCell = row.querySelector('[data-field="label"]');
+                const label = String(labelCell?.textContent || '').replace(/:\s*$/, '').trim();
+                const valueCell = row.querySelector('[data-field="' + bureau.field + '"]');
+                const value = String(valueCell?.textContent || '').trim();
+                if (!label || !value || value === '-' || value === '--') return;
+                const prior = fields[label];
+                fields[label] = prior && prior !== value ? prior + ' | ' + value : value;
+            });
+            result[bureau.code] = fields;
+        });
+        return result;
+    }
+    // Combine matching values, retaining all corresponding bureau labels.
+    function groupBureauFieldValues(bureauFields, fieldNames, kind = 'text') {
+        const groups = new Map();
+        for (const bureau of CRC_BUREAUS) {
+            const fields = bureauFields?.[bureau.code] || {};
+            const entry = Object.entries(fields).find(([label]) =>
+                fieldNames.some(name => label.trim().toLowerCase() === name.toLowerCase()));
+            if (!entry) continue;
+            const value = String(entry[1] || '').trim();
+            if (!value || value === '-' || value === '--') continue;
+            let key = value.replace(/\s+/g, ' ').toUpperCase();
+            if (kind === 'balance' && /^\(?-?\$?\s*[\d,]+(?:\.\d{1,2})?\)?$/.test(value)) {
+                const negative = /-/.test(value) || (value.startsWith('(') && value.endsWith(')'));
+                const number = Number(value.replace(/[^\d.]/g, ''));
+                if (Number.isFinite(number)) key = 'amount:' + (negative ? -number : number).toFixed(2);
+            }
+            if (!groups.has(key)) groups.set(key, { value, bureaus: [] });
+            groups.get(key).bureaus.push(bureau.code);
+        }
+        return [...groups.values()];
+    }
+    function pickPriorityBureauValue(bureauFields, names, preferred) {
+        for (const bureauName of getBureauPriorityOrder(preferred)) {
+            const code = CRC_BUREAUS.find(item => item.field === bureauName)?.code;
+            const fields = bureauFields?.[code] || {};
+            const entry = Object.entries(fields).find(([label]) =>
+                names.some(name => label.trim().toLowerCase() === name.toLowerCase()));
+            if (entry && entry[1] && !['-','--'].includes(entry[1])) return entry[1];
+        }
+        return '';
+    }
+    function updateNegativePreferredValues(items, preferred) {
+        (items || []).forEach(item => {
+            if (!item.bureau_fields) return;
+            item.account_number = pickPriorityBureauValue(item.bureau_fields,
+                ['Account #','Account Number','Account No'],preferred);
+            item.balance = pickPriorityBureauValue(item.bureau_fields,['Balance','Balance Owed'],preferred);
+            item.late_payment = pickPriorityBureauValue(item.bureau_fields,['Late Payment Status'],preferred);
+            item.comments = pickPriorityBureauValue(item.bureau_fields,['Comments'],preferred);
+        });
+    }
+    function formatBureauValueLines(groups) {
+        return groups.map(entry => entry.value + '(' + entry.bureaus.join('-') + ')');
+    }
+    function getDisputeCategory(accountType) {
+        const type = String(accountType || '').toUpperCase();
+        if (/BANKRUPTCY|CHAPTER/.test(type)) return 'bankruptcy';
+        if (/COLLECTION|CHARGE OFF|REPOSSESS|TRANSFERRED|FORECLOSURE/.test(type)) return 'delete';
+        // Include OPEN, CLOSED, PAID and unclassified negative items in Updated.
+        return 'updated';
+    }
+    function sortDisputeItems(items) {
+        return [...items].sort((a,b) => String(a.account || '').localeCompare(String(b.account || ''),
+            undefined, { sensitivity: 'base', numeric: true }));
+    }
+
     function extractData() {
         let output = [];
         let grids = document.querySelectorAll('.MuiDataGrid-root');
@@ -2425,7 +2646,7 @@ Controls padding, font, spacing, and appearance for all 3
             }
 
             function getPriorityRowValue(label) {
-                const priority = ["equifax", "experian", "transunion"];
+                const priority = getBureauPriorityOrder(crcBureauPriority);
                 for (const bureau of priority) {
                     let isNegative = bureaus.map(b => b.toLowerCase()).includes(bureau);
                     if (!isNegative) continue;
@@ -2438,7 +2659,7 @@ Controls padding, font, spacing, and appearance for all 3
             }
 
             function getPriorityValue(label) {
-                const priority = ["equifax", "experian", "transunion"];
+                const priority = getBureauPriorityOrder(crcBureauPriority);
                 let rows = grid.querySelectorAll('.MuiDataGrid-row');
 
                 for (const bureau of priority) {
@@ -2474,7 +2695,7 @@ Controls padding, font, spacing, and appearance for all 3
                     }
                 });
 
-                const priority = ["equifax", "experian", "transunion"];
+                const priority = getBureauPriorityOrder(crcBureauPriority);
                 for (const bureau of priority) {
                     if (!bureaus.map(b => b.toLowerCase()).includes(bureau)) continue;
                     for (let row of matchingRows) {
@@ -2527,6 +2748,7 @@ Controls padding, font, spacing, and appearance for all 3
 
             output.push({
                 account: accountName,
+                bureau_fields: collectNegativeBureauFields(rows, bureaus),
                 account_number: accountNumber,
                 bureau_display: bureauDisplay.trim(),
                 balance: balance,
@@ -2538,6 +2760,115 @@ Controls padding, font, spacing, and appearance for all 3
         });
 
         showResults(output);
+    }
+
+    // Bankruptcy grids are one record each in Disputed Mode. Capture every
+    // reporting bureau and every populated row, not just a preferred reference.
+    function extractBankruptcyTables() {
+        const tables = [];
+        document.querySelectorAll('[id^="public-record-"] .MuiDataGrid-root').forEach(grid => {
+            const rows = [...grid.querySelectorAll('.MuiDataGrid-row')];
+            const byCode = {};
+            CRC_BUREAUS.forEach(bureau => {
+                const fields = {};
+                rows.forEach(row => {
+                    const label = String(row.querySelector('[data-field="label"]')?.textContent || '')
+                        .replace(/:\s*$/, '').trim();
+                    const value = String(row.querySelector('[data-field="' + bureau.field + '"]')?.textContent || '').trim();
+                    if (!label || !value || value === '-' || value === '--') return;
+                    const prior = fields[label];
+                    fields[label] = prior && prior !== value ? prior + ' | ' + value : value;
+                });
+                if (Object.keys(fields).length) byCode[bureau.code] = fields;
+            });
+            const isBankruptcy = Object.values(byCode).some(fields =>
+                Object.entries(fields).some(([label,value]) =>
+                    /^type$/i.test(label) && /bankruptcy|chapter\s*(?:7|11|13)/i.test(value)));
+            if (isBankruptcy) {
+                tables.push({ account: 'Bankruptcy', account_type: 'Bankruptcy',
+                    bureau_fields: byCode });
+            }
+        });
+        return tables;
+    }
+
+    function getDisputeFieldGroups(record) {
+        const byBureau = record.bureau_fields || {};
+        const bankruptcy = getDisputeCategory(record.account_type) === 'bankruptcy';
+        const primary = bankruptcy
+            ? [{ label:'Reference', names:['Reference','Reference #'] },
+               { label:'Date filed / reported', names:['Date Filed/Reported','Date Filed','Date Reported'] },
+               { label:'Status', names:['Status'] }]
+            : [{ label:'Account number', names:['Account #','Account Number','Account No'] },
+               { label:'Balance', names:['Balance','Balance Owed'], kind:'balance' }];
+        const primaryRows = primary.map(field => ({
+            label:field.label,
+            lines:formatBureauValueLines(groupBureauFieldValues(byBureau,field.names,field.kind))
+        }));
+        const skip = new Set(primary.flatMap(field => field.names.map(name => name.toLowerCase())));
+        const labels = [];
+        CRC_BUREAUS.forEach(bureau => {
+            Object.keys(byBureau[bureau.code] || {}).forEach(label => {
+                if (!skip.has(label.toLowerCase()) && !labels.some(x => x.toLowerCase() === label.toLowerCase())) labels.push(label);
+            });
+        });
+        const details = labels.map(label => ({
+            label, lines:formatBureauValueLines(groupBureauFieldValues(byBureau,[label]))
+        })).filter(x => x.lines.length);
+        return { primary: primaryRows, details };
+    }
+    function buildDisputedCategories(negativeData, bankruptcyTables) {
+        const grouped = { delete: [], updated: [], bankruptcy: [] };
+        (negativeData || []).forEach(item => grouped[getDisputeCategory(item.account_type)].push(item));
+        (bankruptcyTables || []).forEach(item => grouped.bankruptcy.push(item));
+        Object.keys(grouped).forEach(key => { grouped[key] = sortDisputeItems(grouped[key]); });
+        return grouped;
+    }
+    function formatDisputedAccountCopy(item) {
+        const values = getDisputeFieldGroups(item);
+        const text = [String(item.account || '(No creditor)'), String(item.account_type || '')];
+        values.primary.concat(values.details).forEach(group => {
+            text.push(group.label + ':');
+            text.push(...(group.lines.length ? group.lines : ['Not reported']));
+        });
+        return text.join('\n').trim();
+    }
+    function renderDisputeAccountCard(item) {
+        const card = document.createElement('article');
+        card.className = 'crc-dispute-card';
+        const heading = document.createElement('h3');
+        heading.textContent = item.account || '(No creditor)';
+        const type = document.createElement('span');
+        type.className = 'crc-dispute-type';
+        type.textContent = item.account_type || 'Unclassified';
+        card.appendChild(heading);
+        card.appendChild(type);
+        const fields = getDisputeFieldGroups(item);
+        function appendField(container, info) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'crc-dispute-field';
+            const label = document.createElement('strong');
+            label.textContent = info.label;
+            wrapper.appendChild(label);
+            (info.lines.length ? info.lines : ['Not reported']).forEach(value => {
+                const line = document.createElement('span');
+                line.className = 'crc-dispute-value';
+                line.textContent = value;
+                wrapper.appendChild(line);
+            });
+            container.appendChild(wrapper);
+        }
+        fields.primary.forEach(field => appendField(card,field));
+        if (fields.details.length) {
+            const details = document.createElement('details');
+            details.className = 'crc-dispute-details';
+            const summary = document.createElement('summary');
+            summary.textContent = 'Other reported data (' + fields.details.length + ')';
+            details.appendChild(summary);
+            fields.details.forEach(field => appendField(details,field));
+            card.appendChild(details);
+        }
+        return card;
     }
 
     function extractBankruptcies() {
@@ -3244,6 +3575,7 @@ function extractInquiries() {
 
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
+        const bankruptcyTables = extractBankruptcyTables();
         let openAccountsData = extractOpenAccounts();
         let openAccounts = openAccountsData.list;
         let openAccountsByBureau = openAccountsData.byBureau;
@@ -3304,49 +3636,118 @@ function extractInquiries() {
         let results = panel.querySelector("#crc-results");
         let copyTextNegative = "";
 
-        const resultsFrag = document.createDocumentFragment();
+        function renderNegativeStandard() {
+            updateNegativePreferredValues(negativeData,crcBureauPriority);
+            copyTextNegative = '';
+            results.replaceChildren();
+            const resultsFrag = document.createDocumentFragment();
 
-        bankruptcies.forEach(item => {
-            let entry = `${item.type}\n${item.reference}\n${item.date}\n${item.status}\n\n`;
-            copyTextNegative += entry;
+            bankruptcies.forEach(item => {
+                let entry = `${item.type}\n${item.reference}\n${item.date}\n${item.status}\n\n`;
+                copyTextNegative += entry;
 
-            const row = document.createElement('div');
-            const h = document.createElement('b'); h.textContent = 'Bankruptcy';
-            const r1 = document.createElement('div'); r1.textContent = item.reference;
-            const r2 = document.createElement('div'); r2.textContent = item.date;
-            const r3 = document.createElement('div'); r3.textContent = item.status;
-            row.appendChild(h);
-            row.appendChild(r1);
-            row.appendChild(r2);
-            row.appendChild(r3);
-            resultsFrag.appendChild(row);
+                const row = document.createElement('div');
+                const h = document.createElement('b'); h.textContent = 'Bankruptcy';
+                const r1 = document.createElement('div'); r1.textContent = item.reference;
+                const r2 = document.createElement('div'); r2.textContent = item.date;
+                const r3 = document.createElement('div'); r3.textContent = item.status;
+                row.appendChild(h);
+                row.appendChild(r1);
+                row.appendChild(r2);
+                row.appendChild(r3);
+                resultsFrag.appendChild(row);
+            });
+
+            negativeData.forEach(item => {
+                let entry = `${item.account}\n${item.account_number}\n${item.balance}\n${item.bureau_display} ${item.account_type}\n\n`;
+                copyTextNegative += entry;
+
+                const row = document.createElement('div');
+                const h = document.createElement('b'); h.textContent = item.account;
+                const r1 = document.createElement('div'); r1.textContent = item.account_number;
+                const r2 = document.createElement('div'); r2.textContent = item.balance;
+                const r3 = document.createElement('div');
+                r3.textContent = `${item.bureau_display} ${item.account_type}`;
+                if (item.warning) {
+                    const warn = document.createElement('b');
+                    warn.style.color = 'red';
+                    warn.textContent = item.warning;
+                    r3.appendChild(document.createElement('br'));
+                    r3.appendChild(warn);
+                }
+                row.appendChild(h);
+                row.appendChild(r1);
+                row.appendChild(r2);
+                row.appendChild(r3);
+                resultsFrag.appendChild(row);
+            });
+
+            results.appendChild(resultsFrag);
+        }
+        renderNegativeStandard();
+
+        const disputeCategories = buildDisputedCategories(negativeData, bankruptcyTables);
+        const negativeStandardView = panel.querySelector('#crc-negative-standard-view');
+        const negativeDisputedView = panel.querySelector('#crc-negative-disputed-view');
+        const disputeResults = panel.querySelector('#crc-dispute-results');
+        const standardModeButton = panel.querySelector('#crc-negative-mode-standard');
+        const disputedModeButton = panel.querySelector('#crc-negative-mode-disputed');
+        const disputeTabButtons = [...panel.querySelectorAll('[data-crc-dispute-category]')];
+        const categoryLabels = { delete: 'DELETE', updated: 'UPDATED', bankruptcy: 'BANKRUPTCY' };
+        let disputedModeActive = false;
+        let disputeCategory = 'delete';
+        let copyTextDisputed = '';
+
+        Object.keys(disputeCategories).forEach(key => {
+            panel.querySelector('[data-crc-count="' + key + '"]').textContent = disputeCategories[key].length;
         });
-
-        negativeData.forEach(item => {
-            let entry = `${item.account}\n${item.account_number}\n${item.balance}\n${item.bureau_display} ${item.account_type}\n\n`;
-            copyTextNegative += entry;
-
-            const row = document.createElement('div');
-            const h = document.createElement('b'); h.textContent = item.account;
-            const r1 = document.createElement('div'); r1.textContent = item.account_number;
-            const r2 = document.createElement('div'); r2.textContent = item.balance;
-            const r3 = document.createElement('div');
-            r3.textContent = `${item.bureau_display} ${item.account_type}`;
-            if (item.warning) {
-                const warn = document.createElement('b');
-                warn.style.color = 'red';
-                warn.textContent = item.warning;
-                r3.appendChild(document.createElement('br'));
-                r3.appendChild(warn);
+        function negativeCopyButtonLabel() {
+            return disputedModeActive ? 'COPY ' + categoryLabels[disputeCategory] + ' ACCOUNTS' : 'COPY NEGATIVE ACCOUNTS';
+        }
+        function renderDisputedCategory() {
+            const items = disputeCategories[disputeCategory];
+            disputeResults.replaceChildren();
+            copyTextDisputed = items.map(formatDisputedAccountCopy).join('\n\n');
+            if (!items.length) {
+                const empty = document.createElement('div');
+                empty.className = 'crc-dispute-empty';
+                empty.textContent = 'No ' + categoryLabels[disputeCategory].toLowerCase() + ' records found.';
+                disputeResults.appendChild(empty);
+            } else {
+                const fragment = document.createDocumentFragment();
+                items.forEach(item => fragment.appendChild(renderDisputeAccountCard(item)));
+                disputeResults.appendChild(fragment);
             }
-            row.appendChild(h);
-            row.appendChild(r1);
-            row.appendChild(r2);
-            row.appendChild(r3);
-            resultsFrag.appendChild(row);
+            disputeTabButtons.forEach(button => {
+                const selected = button.dataset.crcDisputeCategory === disputeCategory;
+                button.classList.toggle('active', selected);
+                button.setAttribute('aria-selected', String(selected));
+            });
+            panel.querySelector('#crc-copy-page-1').textContent = negativeCopyButtonLabel();
+        }
+        function setNegativeMode(active) {
+            disputedModeActive = active;
+            negativeStandardView.hidden = active;
+            negativeDisputedView.hidden = !active;
+            standardModeButton.classList.toggle('active', !active);
+            disputedModeButton.classList.toggle('active', active);
+            standardModeButton.setAttribute('aria-selected', String(!active));
+            disputedModeButton.setAttribute('aria-selected', String(active));
+            if (active) renderDisputedCategory();
+            else panel.querySelector('#crc-copy-page-1').textContent = negativeCopyButtonLabel();
+        }
+        standardModeButton.addEventListener('click', () => setNegativeMode(false));
+        disputedModeButton.addEventListener('click', () => setNegativeMode(true));
+        disputeTabButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                disputeCategory = button.dataset.crcDisputeCategory;
+                renderDisputedCategory();
+            });
         });
-
-        results.appendChild(resultsFrag);
+        // Render category counts and copy content without changing the
+        // default initial ALL ACCOUNTS experience.
+        renderDisputedCategory();
+        setNegativeMode(false);
 
         // ========================================
         // PAGE 3 - PREVIOUS ADDRESSES
@@ -3885,6 +4286,15 @@ function extractInquiries() {
         const copyConnectedInput = panel.querySelector('#crc-copy-connected-inquiries');
         const copyConnectedNewInput = panel.querySelector('#crc-copy-connected-new');
         const openNamesOnlyInput = panel.querySelector('#crc-open-names-only');
+        const bureauPriorityInput = panel.querySelector('#crc-bureau-priority');
+        bureauPriorityInput.value = crcBureauPriority;
+        bureauPriorityInput.addEventListener('change', () => {
+            crcBureauPriority = getBureauPriorityOrder(bureauPriorityInput.value)[0];
+            try { localStorage.setItem(CRC_BUREAU_PRIORITY_KEY, crcBureauPriority); }
+            catch (_) { /* Selection remains active for this session. */ }
+            renderNegativeStandard();
+            // Disputed Mode uses the untouched per-bureau field data.
+        });
         const panelOpacityInput = panel.querySelector('#crc-panel-opacity');
         const panelOpacityValue = panel.querySelector('#crc-panel-opacity-value');
         panelOpacityInput.value = String(crcPanelOpacity);
@@ -4072,9 +4482,8 @@ function extractInquiries() {
         });
 
         copyButtons[0].onclick = function() {
-            navigator.clipboard.writeText(copyTextNegative);
-            this.textContent = "✓ COPIED";
-            setTimeout(() => { this.textContent = "COPY NEGATIVE ACCOUNTS"; }, 1500);
+            copyAccountText(disputedModeActive ? copyTextDisputed : copyTextNegative,
+                this, negativeCopyButtonLabel);
         };
 
         copyButtons[1].onclick = function() {
