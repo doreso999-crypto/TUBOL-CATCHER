@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.8
+// @version      4.9
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -1707,12 +1707,76 @@ Controls padding, font, spacing, and appearance for all 3
     // HTML TEMPLATE
     // ========================================
 
+
+    // Full-page preview lives in a separate about:blank tab, never in storage
+    // or a third-party site. Its report values are added as text DOM nodes.
+    const CRC_FULL_PREVIEW_CSS = `
+body { margin:0; background:#14171b; color:#e4e6eb; }
+*, *::before, *::after { box-sizing:border-box; }
+#crc-negative-panel.crc-preview-page {
+    position:static; inset:auto; width:100%; max-width:none;
+    min-height:100vh; height:auto; max-height:none; margin:0; padding:0;
+    border:0; border-radius:0; box-shadow:none; overflow:visible;
+    display:block; background:#14171b; color:#e4e6eb;
+}
+.crc-preview-layout { max-width:1160px; margin:0 auto; padding:28px clamp(14px,4vw,42px) 75px; }
+.crc-preview-header { display:flex; align-items:center; justify-content:space-between; gap:18px;
+    flex-wrap:wrap; padding:10px 0 20px; }
+.crc-preview-header h1 { margin:0; color:#fff; font-size:28px; line-height:1.25; }
+.crc-preview-kicker { font-size:12px; color:#91b9f0; font-weight:800; letter-spacing:.08em; margin-bottom:7px; }
+.crc-preview-meta { color:#b0b8c3; font-size:13px; margin-top:7px; line-height:1.4; }
+.crc-preview-actions { display:flex; gap:10px; align-items:center; }
+.crc-preview-copy { padding:12px 18px; min-height:44px; border:1px solid #347fe9;
+    border-radius:9px; background:#2374e1; color:#fff; font-size:14px; font-weight:750; cursor:pointer; }
+.crc-preview-copy:hover { background:#3982e4; }
+.crc-preview-copy:focus-visible, .crc-preview-tab:focus-visible { outline:2px solid #9bc4ff; outline-offset:2px; }
+.crc-preview-nav { display:flex; align-items:center; gap:6px; padding:8px; border:1px solid #3c434d;
+    background:#22262b; border-radius:12px; margin:0 0 22px; flex-wrap:wrap; }
+.crc-preview-tab { border:0; border-radius:8px; padding:11px 17px;
+    background:transparent; color:#b0bac8; cursor:pointer; font-size:14px; font-weight:750; }
+.crc-preview-tab.active { color:#fff; background:#384656; }
+.crc-preview-view[hidden], .crc-preview-pane[hidden] { display:none !important; }
+.crc-preview-view { min-height:55vh; }
+.crc-preview-subnav { display:flex; align-items:center; gap:7px; flex-wrap:wrap;
+    padding:0 0 14px; margin:0 0 10px; border-bottom:1px solid #38404a; }
+.crc-preview-subnav .crc-preview-tab { padding:9px 13px; font-size:13px; }
+.crc-preview-intro { color:#bac3cd; font-size:13px; line-height:1.5; margin:3px 0 18px; }
+.crc-preview-page #crc-results { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px;
+    padding:4px 0 10px; background:transparent; }
+.crc-preview-page #crc-results > div { margin:0; padding:19px 20px; }
+.crc-preview-page #crc-dispute-results { display:grid; grid-template-columns:repeat(auto-fit,minmax(330px,1fr));
+    gap:14px; padding:4px 0 10px; }
+.crc-preview-page .crc-dispute-card { margin:0; padding:18px 20px; }
+.crc-preview-page .crc-dispute-value { font-size:15px; }
+.crc-preview-page #crc-inquiries { width:100%; padding:5px 0 24px; background:transparent; }
+.crc-preview-page .crc-inquiry-section { margin-bottom:16px; }
+.crc-preview-page .crc-inquiry-items { padding:4px 8px 8px; }
+.crc-preview-page .crc-open-accounts-view { display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr));
+    gap:12px; }
+.crc-preview-page .crc-open-account { margin:0; }
+.crc-preview-page .crc-personal-section { padding:0 0 18px; }
+.crc-preview-page .crc-personal-heading { padding-left:0; margin-bottom:10px; }
+.crc-preview-page .crc-inquiry-bureau { cursor:pointer; }
+.crc-preview-page .crc-inquiry-bureau:focus-visible { outline:2px solid #8bb7fa; outline-offset:2px; }
+.crc-preview-footer { border-top:1px solid #343a41; color:#9ea9b6; padding:20px 0 0;
+    margin-top:25px; font-size:12px; line-height:1.5; }
+@media(max-width:660px) {
+    .crc-preview-header h1 { font-size:23px; }
+    .crc-preview-page #crc-results, .crc-preview-page #crc-dispute-results,
+    .crc-preview-page .crc-open-accounts-view { display:block; }
+    .crc-preview-page #crc-results > div, .crc-preview-page .crc-dispute-card,
+    .crc-preview-page .crc-open-account { margin-bottom:12px; }
+    .crc-preview-tab { padding:10px 12px; font-size:12px; }
+}
+`;
+
     const HTML_TEMPLATE = `
         <!-- TOP BAR -->
         <div id="crc-top-bar">
             <button id="crc-settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="crc-settings-menu">⚙</button>
             <div id="crc-drag-handle" aria-hidden="true" title="Drag to move the extractor">DRAG TO MOVE</div>
             <div id="crc-window-controls">
+                <button id="crc-open-preview-btn" type="button" class="crc-window-btn" title="Open report preview in a new tab" aria-label="Open full-page report preview">↗</button>
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
             </div>
         </div>
