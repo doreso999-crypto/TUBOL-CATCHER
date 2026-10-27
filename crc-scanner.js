@@ -2499,7 +2499,8 @@ Controls padding, font, spacing, and appearance for all 3
     function collectNegativeBureauFields(rows, reportingBureaus) {
         const result = {};
         CRC_BUREAUS.forEach(bureau => {
-            if (!reportingBureaus.some(name => name.toLowerCase() === bureau.field)) return;
+            // Include every bureau cell from the account's table, including
+            // bureaus that do not have a Negative toggle on this record.
             const fields = {};
             Object.values(rows).forEach(row => {
                 const labelCell = row.querySelector('[data-field="label"]');
@@ -2739,6 +2740,115 @@ Controls padding, font, spacing, and appearance for all 3
         });
 
         showResults(output);
+    }
+
+    // Bankruptcy grids are one record each in Disputed Mode. Capture every
+    // reporting bureau and every populated row, not just a preferred reference.
+    function extractBankruptcyTables() {
+        const tables = [];
+        document.querySelectorAll('[id^="public-record-"] .MuiDataGrid-root').forEach(grid => {
+            const rows = [...grid.querySelectorAll('.MuiDataGrid-row')];
+            const byCode = {};
+            CRC_BUREAUS.forEach(bureau => {
+                const fields = {};
+                rows.forEach(row => {
+                    const label = String(row.querySelector('[data-field="label"]')?.textContent || '')
+                        .replace(/:\s*$/, '').trim();
+                    const value = String(row.querySelector('[data-field="' + bureau.field + '"]')?.textContent || '').trim();
+                    if (!label || !value || value === '-' || value === '--') return;
+                    const prior = fields[label];
+                    fields[label] = prior && prior !== value ? prior + ' | ' + value : value;
+                });
+                if (Object.keys(fields).length) byCode[bureau.code] = fields;
+            });
+            const isBankruptcy = Object.values(byCode).some(fields =>
+                Object.entries(fields).some(([label,value]) =>
+                    /^type$/i.test(label) && /bankruptcy/i.test(value)));
+            if (isBankruptcy) {
+                tables.push({ account: 'Bankruptcy', account_type: 'Bankruptcy',
+                    bureau_fields: byCode });
+            }
+        });
+        return tables;
+    }
+
+    function getDisputeFieldGroups(record) {
+        const byBureau = record.bureau_fields || {};
+        const bankruptcy = getDisputeCategory(record.account_type) === 'bankruptcy';
+        const primary = bankruptcy
+            ? [{ label:'Reference', names:['Reference','Reference #'] },
+               { label:'Date filed / reported', names:['Date Filed/Reported','Date Filed','Date Reported'] },
+               { label:'Status', names:['Status'] }]
+            : [{ label:'Account number', names:['Account #','Account Number','Account No'] },
+               { label:'Balance', names:['Balance','Balance Owed'], kind:'balance' }];
+        const primaryRows = primary.map(field => ({
+            label:field.label,
+            lines:formatBureauValueLines(groupBureauFieldValues(byBureau,field.names,field.kind))
+        }));
+        const skip = new Set(primary.flatMap(field => field.names.map(name => name.toLowerCase())));
+        const labels = [];
+        CRC_BUREAUS.forEach(bureau => {
+            Object.keys(byBureau[bureau.code] || {}).forEach(label => {
+                if (!skip.has(label.toLowerCase()) && !labels.some(x => x.toLowerCase() === label.toLowerCase())) labels.push(label);
+            });
+        });
+        const details = labels.map(label => ({
+            label, lines:formatBureauValueLines(groupBureauFieldValues(byBureau,[label]))
+        })).filter(x => x.lines.length);
+        return { primary: primaryRows, details };
+    }
+    function buildDisputedCategories(negativeData, bankruptcyTables) {
+        const grouped = { delete: [], updated: [], bankruptcy: [] };
+        (negativeData || []).forEach(item => grouped[getDisputeCategory(item.account_type)].push(item));
+        (bankruptcyTables || []).forEach(item => grouped.bankruptcy.push(item));
+        Object.keys(grouped).forEach(key => { grouped[key] = sortDisputeItems(grouped[key]); });
+        return grouped;
+    }
+    function formatDisputedAccountCopy(item) {
+        const values = getDisputeFieldGroups(item);
+        const text = [String(item.account || '(No creditor)'), String(item.account_type || '')];
+        values.primary.concat(values.details).forEach(group => {
+            text.push(group.label + ':');
+            text.push(...(group.lines.length ? group.lines : ['Not reported']));
+        });
+        return text.join('\n').trim();
+    }
+    function renderDisputeAccountCard(item) {
+        const card = document.createElement('article');
+        card.className = 'crc-dispute-card';
+        const heading = document.createElement('h3');
+        heading.textContent = item.account || '(No creditor)';
+        const type = document.createElement('span');
+        type.className = 'crc-dispute-type';
+        type.textContent = item.account_type || 'Unclassified';
+        card.appendChild(heading);
+        card.appendChild(type);
+        const fields = getDisputeFieldGroups(item);
+        function appendField(container, info) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'crc-dispute-field';
+            const label = document.createElement('strong');
+            label.textContent = info.label;
+            wrapper.appendChild(label);
+            (info.lines.length ? info.lines : ['Not reported']).forEach(value => {
+                const line = document.createElement('span');
+                line.className = 'crc-dispute-value';
+                line.textContent = value;
+                wrapper.appendChild(line);
+            });
+            container.appendChild(wrapper);
+        }
+        fields.primary.forEach(field => appendField(card,field));
+        if (fields.details.length) {
+            const details = document.createElement('details');
+            details.className = 'crc-dispute-details';
+            const summary = document.createElement('summary');
+            summary.textContent = 'Other reported data (' + fields.details.length + ')';
+            details.appendChild(summary);
+            fields.details.forEach(field => appendField(details,field));
+            card.appendChild(details);
+        }
+        return card;
     }
 
     function extractBankruptcies() {
