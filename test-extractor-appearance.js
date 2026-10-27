@@ -172,7 +172,7 @@ assert(source.includes('id="crc-minimize-btn"'),
     'Minimize/restore must remain available');
 assert(source.includes('id="crc-settings-close"'),
     'The Settings dialog must still be independently dismissible');
-assert(source.includes('id="crc-scan-btn"'),
+assert(source.includes('scanButton.id = "crc-scan-btn"'),
     'The scan button should remain available');
 assert(source.includes('#crc-settings-menu .crc-settings-note { font-size: 15px;'));
 assert(source.includes('#crc-settings-menu .crc-settings-heading { font-size: 26px;'));
