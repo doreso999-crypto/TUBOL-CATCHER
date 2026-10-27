@@ -2783,7 +2783,7 @@ Controls padding, font, spacing, and appearance for all 3
             });
             const isBankruptcy = Object.values(byCode).some(fields =>
                 Object.entries(fields).some(([label,value]) =>
-                    /^type$/i.test(label) && /bankruptcy/i.test(value)));
+                    /^type$/i.test(label) && /bankruptcy|chapter\s*(?:7|11|13)/i.test(value)));
             if (isBankruptcy) {
                 tables.push({ account: 'Bankruptcy', account_type: 'Bankruptcy',
                     bureau_fields: byCode });
