@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.5
+// @version      4.6
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -3150,7 +3150,13 @@ function extractInquiries() {
             bar.removeEventListener('pointercancel', pointerEnd);
         }
         panel.__crcDisposeDrag = destroy;
-        return { reclamp, destroy };
+        // Minimize / restore around the current upper-right corner,
+        // rather than shrinking the window around its top-left corner.
+        function keepTopRightAnchor(right, top) {
+            const width = panel.getBoundingClientRect().width;
+            return movePanel(right - width, top);
+        }
+        return { reclamp, keepTopRightAnchor, savePosition, destroy };
     }
 
     function showResults(negativeData) {
@@ -3803,10 +3809,13 @@ function extractInquiries() {
 
         panel.querySelector("#crc-minimize-btn").onclick = function() {
             setSettingsOpen(false);
+            const before = panel.getBoundingClientRect();
             panel.classList.toggle("crc-minimized");
             this.textContent = panel.classList.contains("crc-minimized") ? "+" : "−";
-            // The window is draggable from its top bar in either state.
-            dragControls.reclamp();
+            // Match the prior right edge after the width changes.
+            // The saved coordinates represent the current window size.
+            dragControls.keepTopRightAnchor(before.right, before.top);
+            dragControls.savePosition();
         };
 
         // ========================================
