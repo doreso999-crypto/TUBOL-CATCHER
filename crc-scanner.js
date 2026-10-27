@@ -4075,7 +4075,7 @@ function extractInquiries() {
         negativeTabs.set('disputed', makeTab(negativeTabsNav,'Disputed Mode',()=>selectNegativeMode('disputed')));
         addIntro(negativePanes.standard,
             'Preferred-bureau summary from the extractor. Use Settings in the original tab to change priority.');
-        cloneList(snapshot.negativeResults, negativePanes.standard);
+        const standardList=cloneList(snapshot.negativeResults, negativePanes.standard);
 
         const disputeNav = put(negativePanes.disputed, make('div', 'crc-preview-subnav'));
         disputeNav.setAttribute('role','tablist');
@@ -4129,11 +4129,11 @@ function extractInquiries() {
             : 'Showing all extracted inquiries.';
         addIntro(inquiryPanes.inquiries,
             dateNote + ' Change the date filter in the original extractor and reopen this preview to refresh.');
-        cloneList(snapshot.inquiriesView,inquiryPanes.inquiries);
+        const regularList=cloneList(snapshot.inquiriesView,inquiryPanes.inquiries);
         addIntro(inquiryPanes.open,'All open accounts from the extracted report.');
-        cloneList(snapshot.openAccountsView,inquiryPanes.open);
+        const openList=cloneList(snapshot.openAccountsView,inquiryPanes.open);
         addIntro(inquiryPanes.new,'Recent inquiries (last 35 days) from the extracted report.');
-        cloneList(snapshot.newInquiriesView,inquiryPanes.new);
+        const newList=cloneList(snapshot.newInquiriesView,inquiryPanes.new);
         inquiryTabs.set('inquiries',makeTab(inquiryNav,'Inquiries',()=>selectInquiryMode('inquiries')));
         inquiryTabs.set('open',makeTab(inquiryNav,'Open accounts',()=>selectInquiryMode('open')));
         inquiryTabs.set('new',makeTab(inquiryNav,'New inquiries',()=>selectInquiryMode('new')));
@@ -4147,10 +4147,10 @@ function extractInquiries() {
         // PERSONAL INFO: retain bureau-grouped previous addresses and employers.
         const personalAddresses = put(pages.personal,make('section','crc-personal-section'));
         put(personalAddresses,make('h2','crc-personal-heading','PREVIOUS ADDRESSES'));
-        cloneList(snapshot.addressesView,personalAddresses);
+        const addressesList=cloneList(snapshot.addressesView,personalAddresses);
         const personalEmployers = put(pages.personal,make('section','crc-personal-section'));
         put(personalEmployers,make('h2','crc-personal-heading','EMPLOYERS'));
-        cloneList(snapshot.employersView,personalEmployers);
+        const employersList=cloneList(snapshot.employersView,personalEmployers);
 
         put(layout,make('footer','crc-preview-footer',
             'Private, local snapshot. This tab does not automatically refresh; reopen it from TUBOL CATCHER after rescanning or changing settings. No report values are placed in browser storage or sent to a server by the preview.'));
