@@ -721,6 +721,112 @@ const CSS_STYLES = `
 }
 
 
+/* Focused negative mode navigation; preserves the regular view. */
+.crc-negative-modes, .crc-dispute-tabs {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 9px 12px;
+    background: #1b1d20;
+    border-bottom: 1px solid #353a42;
+}
+.crc-negative-modes button, .crc-dispute-tabs button {
+    border: 0;
+    border-radius: 8px;
+    background: transparent;
+    color: #aeb7c3;
+    padding: 9px 11px;
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+}
+.crc-negative-modes button.active, .crc-dispute-tabs button.active {
+    background: #334254;
+    color: #e7f1ff;
+}
+.crc-dispute-tabs { padding: 8px 12px; gap: 4px; }
+.crc-dispute-tabs button {
+    flex: 1;
+    min-width: 0;
+    padding: 9px 5px;
+    font-size: 12px;
+    white-space: nowrap;
+}
+.crc-dispute-tabs button span {
+    font-size: 11px;
+    padding: 2px 5px;
+    border-radius: 8px;
+    background: #434850;
+}
+#crc-negative-disputed-view[hidden], #crc-negative-standard-view[hidden] { display:none !important; }
+.crc-dispute-help {
+    margin: 10px 15px 6px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #a8b1bd;
+}
+#crc-dispute-results { padding: 8px 12px 24px; }
+.crc-dispute-card {
+    background: #24272b;
+    border: 1px solid #41464e;
+    border-radius: 10px;
+    margin: 0 0 10px;
+    padding: 13px 14px;
+}
+.crc-dispute-card h3 {
+    margin: 0 0 8px;
+    color: #f0f2f5;
+    font-size: 15px;
+    line-height: 1.35;
+    overflow-wrap: anywhere;
+}
+.crc-dispute-type {
+    display: inline-block;
+    margin-bottom: 11px;
+    border-radius: 5px;
+    padding: 3px 7px;
+    font-size: 11px;
+    font-weight: 700;
+    background: #39414b;
+    color: #d7e1ed;
+}
+.crc-dispute-field { margin: 0 0 11px; }
+.crc-dispute-field > strong {
+    display: block;
+    margin: 0 0 4px;
+    color: #abb6c5;
+    font-size: 12px;
+}
+.crc-dispute-value {
+    display: block;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #f0f2f5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-variant-numeric: tabular-nums;
+}
+.crc-dispute-details {
+    border-top: 1px solid #3c4148;
+    margin-top: 9px;
+    padding-top: 10px;
+}
+.crc-dispute-details summary {
+    cursor: pointer;
+    font-size: 12px;
+    color: #b3caff;
+    font-weight: 700;
+}
+.crc-dispute-details .crc-dispute-field:first-of-type { margin-top: 12px; }
+.crc-dispute-empty {
+    padding: 30px 16px;
+    color: #adb8c7;
+    background: #24272b;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 13px;
+}
+
 /* =========================================================
    COLLECTION WARNING
    ========================================================= */
@@ -1646,6 +1752,14 @@ Controls padding, font, spacing, and appearance for all 3
                     <option value="legacy">Legacy Display — Original grouped lists</option>
                 </select>
                 <div class="crc-settings-note">List format applies to Inquiries, New Inquiries and Personal Info.</div>
+                <div class="crc-settings-section-title">Negative account data priority</div>
+                <label for="crc-bureau-priority">Preferred credit bureau</label>
+                <select id="crc-bureau-priority">
+                    <option value="equifax">Equifax first</option>
+                    <option value="experian">Experian first</option>
+                    <option value="transunion">TransUnion first</option>
+                </select>
+                <div class="crc-settings-note">Controls which bureau supplies account numbers, balances and other single-value fields in the regular Negative view. Other bureaus are used if the preferred bureau has no value. Disputed Mode always shows all reported bureaus, regardless of this setting.</div>
                 <div class="crc-settings-section-title">Extractor appearance</div>
                 <label for="crc-panel-opacity">Extractor opacity</label>
                 <div id="crc-opacity-row">
@@ -1729,7 +1843,22 @@ Controls padding, font, spacing, and appearance for all 3
         <!-- PAGE CONTENT -->
         <div id="crc-page-content">
             <div id="crc-page-1" class="crc-page">
-                <div id="crc-results"></div>
+                <div id="crc-negative-modes" class="crc-negative-modes" role="tablist" aria-label="Negative account modes">
+                    <button type="button" id="crc-negative-mode-standard" class="active" role="tab" aria-selected="true">ALL ACCOUNTS</button>
+                    <button type="button" id="crc-negative-mode-disputed" role="tab" aria-selected="false">DISPUTED MODE</button>
+                </div>
+                <div id="crc-negative-standard-view">
+                    <div id="crc-results"></div>
+                </div>
+                <div id="crc-negative-disputed-view" hidden>
+                    <div class="crc-dispute-tabs" role="tablist" aria-label="Disputed account categories">
+                        <button type="button" class="active" data-crc-dispute-category="delete" role="tab" aria-selected="true">DELETE <span data-crc-count="delete">0</span></button>
+                        <button type="button" data-crc-dispute-category="updated" role="tab" aria-selected="false">UPDATED <span data-crc-count="updated">0</span></button>
+                        <button type="button" data-crc-dispute-category="bankruptcy" role="tab" aria-selected="false">BANKRUPTCY <span data-crc-count="bankruptcy">0</span></button>
+                    </div>
+                    <p class="crc-dispute-help">All bureau values are shown. Matching values share bureau labels. Select a card's details to see the rest of its reported fields.</p>
+                    <div id="crc-dispute-results"></div>
+                </div>
             </div>
 
         <div id="crc-page-2" class="crc-page">
