@@ -27,6 +27,8 @@ assert.equal(appearance.getSavedPanelOpacity(), 100);
 assert.equal(appearance.clampPanelOpacity(10), 60);
 assert.equal(appearance.clampPanelOpacity(200), 100);
 assert.equal(appearance.clampPanelOpacity('NaN'), 100);
+assert.equal(appearance.clampPanelOpacity(73), 73, '1% precision must be supported');
+assert.equal(appearance.clampPanelOpacity('87'), 87);
 const faded = { style: {} };
 assert.equal(appearance.applyPanelOpacity(faded, 75), 75);
 assert.equal(faded.style.opacity, '0.75');
@@ -47,7 +49,7 @@ const drag = new Function('window','document','localStorage', 'CRC_PANEL_POSITIO
     '\nreturn {clampExtractorPosition,installExtractorDragging};')(
         window,document,localStorage,'tubol-crc-panel-position-v1'
     );
-assert.deepEqual(drag.clampExtractorPosition(-50, 1000, 580, 720, 1280, 900), { left: 0, top: 180 });
+assert.deepEqual(drag.clampExtractorPosition(-50, 1000, 440, 792, 1280, 900), { left: 0, top: 108 });
 function makePanel() {
     let minimized = false;
     const events = {};
@@ -69,7 +71,7 @@ function makePanel() {
             throw new Error('Unexpected selector: '+selector);
         },
         getBoundingClientRect() {
-            const width = minimized ? 365 : 580, height = minimized ? 68 : 720;
+            const width = minimized ? 300 : 440, height = minimized ? 58 : 792;
             const left = this.style.left ? parseFloat(this.style.left) : window.innerWidth - width - 20;
             const top = this.style.top ? parseFloat(this.style.top) : 20;
             return {left,top,width,height,right:left+width,bottom:top+height};
@@ -86,22 +88,22 @@ function event(pointerId, clientX, clientY, control = false, button = 0) {
 }
 const p = makePanel();
 const controller = drag.installExtractorDragging(p);
-assert.equal(p.style.left,'680px');
+assert.equal(p.style.left,'820px');
 assert.equal(p.style.top,'20px');
 assert.equal(listeners.resize.size,1);
 p.bar.events.pointerdown(event(1,760,35,true));
-assert.equal(p.style.left,'680px', 'Button must not start dragging');
+assert.equal(p.style.left,'820px', 'Button must not start dragging');
 const start = event(2,760,35);
 p.bar.events.pointerdown(start);
 assert.equal(start.prevented,true);
 p.bar.events.pointermove(event(2,2000,1200));
-assert.equal(p.style.left,'700px');
-assert.equal(p.style.top,'180px');
+assert.equal(p.style.left,'840px');
+assert.equal(p.style.top,'108px');
 p.bar.events.pointerup(event(2,2000,1200));
-assert.deepEqual(JSON.parse(storage.get('tubol-crc-panel-position-v1')), {left:700,top:180});
+assert.deepEqual(JSON.parse(storage.get('tubol-crc-panel-position-v1')), {left:840,top:108});
 p.minimized=true;
 controller.reclamp();
-assert.equal(p.style.left,'700px','Minimize retains position');
+assert.equal(p.style.left,'840px','Minimize retains position');
 p.bar.events.pointerdown(event(3,1000,205));
 p.bar.events.pointermove(event(3,0,0));
 p.bar.events.pointerup(event(3,0,0));
@@ -127,8 +129,12 @@ assert.equal(listeners.resize.size,0);
 
 assert(source.includes('id="crc-panel-opacity"'));
 assert(source.includes("panelOpacityInput.addEventListener('input'"));
-assert(source.includes('width: 580px;'));
-assert(source.includes('width: 365px;'));
+assert(source.includes('width: 440px;'));
+assert(source.includes('height: 88vh;'));
+assert(source.includes('width: 300px;'));
+assert(source.includes('min-height: 58px;'));
+assert(source.includes('id="crc-panel-opacity" min="60" max="100" step="1"'));
+assert(!source.includes('id="crc-panel-opacity" min="60" max="100" step="5"'));
 assert(source.includes('DRAG TO MOVE'));
 assert(source.includes('#crc-settings-menu .crc-settings-note { font-size: 15px;'));
 assert(source.includes('#crc-settings-menu .crc-settings-heading { font-size: 26px;'));
@@ -139,4 +145,4 @@ const template = slice('    const HTML_TEMPLATE = \`',
 const barEnd=template.indexOf('        </div>\n\n',template.indexOf('<div id="crc-top-bar">'));
 const backdrop=template.indexOf('id="crc-settings-backdrop"');
 assert(backdrop > barEnd, 'Settings must be outside the draggable header');
-console.log('PASS: larger fonts and panel, saved opacity, draggable top bar in both states, bounds, resize, persistence, safe buttons');
+console.log('PASS: original panel dimensions, slightly larger text, 1% opacity control, dragging, bounds, persistence, safe buttons');

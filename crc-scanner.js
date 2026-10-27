@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      4.4
+// @version      4.5
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -103,10 +103,10 @@ const CSS_STYLES = `
 
 
 #crc-negative-panel {
-    width: 580px;
+    width: 440px;
     max-width: calc(100vw - 32px);
-    height: min(92vh, 920px);
-    max-height: calc(100vh - 32px);
+    height: 88vh;
+    max-height: 88vh;
 
     position: fixed;
     top: 20px;
@@ -149,7 +149,7 @@ const CSS_STYLES = `
 
 #crc-top-bar {
     width: 100%;
-    min-height: 68px;
+    min-height: 58px;
 
     box-sizing: border-box;
 
@@ -183,7 +183,7 @@ const CSS_STYLES = `
 
     cursor: pointer;
 
-    font-size: 23px;
+    font-size: 22px;
 
     transition:
         background .15s ease,
@@ -207,7 +207,7 @@ const CSS_STYLES = `
     overflow: visible;
     text-overflow: clip;
     overflow-wrap: anywhere;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.5;
 }
 
@@ -225,13 +225,13 @@ const CSS_STYLES = `
     min-width: 0;
     margin: 0 12px;
     text-align: center;
-    font-size: 17px;
+    font-size: 16px;
     color: #b8bdc4;
     font-weight: 750;
     letter-spacing: .04em;
     pointer-events: none;
 }
-#crc-negative-panel.crc-minimized #crc-drag-handle { font-size: 16px; }
+#crc-negative-panel.crc-minimized #crc-drag-handle { font-size: 15px; }
 #crc-settings-backdrop[hidden] { display: none !important; }
 #crc-settings-backdrop {
     position: fixed;
@@ -262,19 +262,19 @@ const CSS_STYLES = `
 }
 #crc-settings-menu[hidden] { display: none !important; }
 #crc-settings-menu .crc-settings-heading {
-    font-size: 23px;
+    font-size: 22px;
     font-weight: 800;
 }
 #crc-settings-menu .crc-settings-heading-row { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-#crc-settings-close { color:#fff; background:transparent; border:0; border-radius:6px; padding:8px 10px; font-size: 20px; cursor:pointer; }
+#crc-settings-close { color:#fff; background:transparent; border:0; border-radius:6px; padding:8px 10px; font-size: 19px; cursor:pointer; }
 #crc-settings-tabs { display:flex; gap:8px; margin:12px 0 14px; border-bottom:1px solid #444; }
-#crc-settings-tabs button { color:#d5d7da; background:transparent; border:0; padding:10px; cursor:pointer; font-size: 15px; font-weight:700; border-bottom:3px solid transparent; }
+#crc-settings-tabs button { color:#d5d7da; background:transparent; border:0; padding:10px; cursor:pointer; font-size: 14px; font-weight:700; border-bottom:3px solid transparent; }
 #crc-settings-tabs button.active { border-bottom-color:#3982e4; color:#fff; }
 #crc-settings-content { min-height:0; overflow-y:auto; flex:1; padding:2px 4px 8px; }
 #crc-settings-general[hidden],#crc-settings-aliases[hidden] { display:none !important; }
 #crc-settings-menu label {
     display: block;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
 }
 #crc-settings-menu select {
@@ -287,19 +287,19 @@ const CSS_STYLES = `
     color: #e4e6eb;
     border: 1px solid #55585b;
     border-radius: 8px;
-    font-size: 15px;
+    font-size: 14px;
     cursor: pointer;
 }
 #crc-settings-menu .crc-settings-note {
     color: #b0b3b8;
-    font-size: 14px;
+    font-size: 13px;
     line-height: 1.5;
 }
 #crc-settings-menu .crc-settings-section-title {
     margin: 14px 0 9px;
     padding-top: 11px;
     border-top: 1px solid #3a3b3c;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 800;
     letter-spacing: .03em;
 }
@@ -325,8 +325,8 @@ const CSS_STYLES = `
 #crc-alias-new-btn { display:inline-block; margin:8px 0; border:0; border-radius:7px; padding:10px 12px; color:#fff; background:#2374e1; font-weight:700; cursor:pointer; }
 #crc-alias-list { max-height: none; overflow-y: visible; background: #18191a; padding: 5px; border: 1px solid #44484b; border-radius: 8px; }
 .crc-alias-entity { margin-bottom: 5px; border: 1px solid #353638; border-radius: 6px; }
-.crc-alias-entity summary { cursor: pointer; font-size: 14px; font-weight: 700; padding: 8px; }
-.crc-alias-variation { cursor: context-menu; font-size: 14px; padding: 6px 10px; border-top: 1px solid #353638; overflow-wrap: anywhere; }
+.crc-alias-entity summary { cursor: pointer; font-size: 13px; font-weight: 700; padding: 8px; }
+.crc-alias-variation { cursor: context-menu; font-size: 13px; padding: 6px 10px; border-top: 1px solid #353638; overflow-wrap: anywhere; }
 .crc-alias-variation:hover { background: #3a3b3c; }
 .crc-alias-custom { color: #95caff; }
 #crc-alias-reset { border-radius: 7px; padding: 8px; cursor: pointer; color: #ddd; background: transparent; border: 1px solid #55585b; margin-top: 8px; }
@@ -334,7 +334,7 @@ const CSS_STYLES = `
 .crc-alias-overlay { position: fixed; inset: 0; z-index: 100; padding: 15px; background: rgba(0,0,0,.8); display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 .crc-alias-card { background: #242526; border: 1px solid #53575a; border-radius: 12px; padding: 18px; width: min(480px, calc(100vw - 36px)); max-height: min(76vh, 550px); overflow-y: auto; box-sizing: border-box; }
 .crc-alias-card h3 { margin: 0 0 8px; }
-#crc-alias-name { font-size: 15px; margin: 8px 0; overflow-wrap: anywhere; }
+#crc-alias-name { font-size: 14px; margin: 8px 0; overflow-wrap: anywhere; }
 .crc-alias-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 .crc-alias-actions button { cursor: pointer; color: #fff; background: #3a3b3c; border: 0; padding: 9px 12px; border-radius: 7px; }
 .crc-alias-actions .crc-alias-primary { background: #2374e1; }
@@ -348,7 +348,7 @@ const CSS_STYLES = `
     background: #2374e1;
     border: 0;
     border-radius: 8px;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 750;
     cursor: pointer;
 }
@@ -385,7 +385,7 @@ const CSS_STYLES = `
 
     cursor: pointer;
 
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 500;
 
     transition:
@@ -472,7 +472,7 @@ const CSS_STYLES = `
 
     color: #b0b3b8;
 
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 500;
 }
 
@@ -482,7 +482,7 @@ const CSS_STYLES = `
 
     color: #e4e6eb;
 
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 700;
 }
 
@@ -528,7 +528,7 @@ const CSS_STYLES = `
 
     cursor: pointer;
 
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
 
     transition:
@@ -678,7 +678,7 @@ const CSS_STYLES = `
 
     color: #e4e6eb;
 
-    font-size: 18px;
+    font-size: 17px;
     font-weight: 700;
 
     line-height: 1.35;
@@ -690,7 +690,7 @@ const CSS_STYLES = `
 
     color: #b0b3b8;
 
-    font-size: 15px;
+    font-size: 14px;
 
     line-height: 1.5;
 }
@@ -701,7 +701,7 @@ const CSS_STYLES = `
 
     color: #d8dadf;
 
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
 }
 
@@ -724,7 +724,7 @@ const CSS_STYLES = `
 
     color: #ff6b78 !important;
 
-    font-size: 13px !important;
+    font-size: 12px !important;
     font-weight: 700;
 }
 
@@ -763,7 +763,7 @@ const CSS_STYLES = `
 
     color: #2d88ff;
 
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 800;
 
     text-transform: uppercase;
@@ -780,7 +780,7 @@ const CSS_STYLES = `
 
     margin-left: 8px;
 
-    font-size: 14px;
+    font-size: 13px;
 
     transition: transform .15s ease;
 }
@@ -859,7 +859,7 @@ const CSS_STYLES = `
 
     color: #e4e6eb;
 
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
 
     white-space: nowrap;
@@ -875,7 +875,7 @@ const CSS_STYLES = `
 
     color: #b0b3b8;
 
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 800;
 
     text-align: center;
@@ -891,7 +891,7 @@ const CSS_STYLES = `
 
     color: #8f9397;
 
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
 }
 
@@ -909,7 +909,7 @@ const CSS_STYLES = `
 
     color: #8f9397;
 
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.5;
 
     text-align: center;
@@ -954,7 +954,7 @@ const CSS_STYLES = `
 
     color: #e4e6eb;
 
-    font-size: 20px;
+    font-size: 19px;
     font-weight: 700;
 }
 
@@ -964,7 +964,7 @@ const CSS_STYLES = `
 
     color: #b0b3b8;
 
-    font-size: 15px;
+    font-size: 14px;
 
     line-height: 1.6;
 }
@@ -1013,7 +1013,7 @@ const CSS_STYLES = `
 
     cursor: pointer;
 
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
 
     transition:
@@ -1092,7 +1092,7 @@ const CSS_STYLES = `
 
     cursor: pointer;
 
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 700;
 
     box-shadow:
@@ -1125,7 +1125,7 @@ const CSS_STYLES = `
    ========================================================= */
 
 #crc-negative-panel.crc-minimized {
-    width: 365px;
+    width: 300px;
 
     height: auto;
     max-width: calc(100vw - 24px);
@@ -1176,23 +1176,23 @@ Controls padding, font, spacing, and appearance for all 3
 
 .crc-stat-row label {
     color: #b0b3b8;
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 500;
 }
 
 .crc-stat-row b {
     color: #e4e6eb;
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 700;
 }
 
 /* Bureau-grouped personal information */
-.crc-personal-heading { padding: 14px 16px 0; margin: 0; font-size: 15px; font-weight: 800; color: #e4e6eb; }
+.crc-personal-heading { padding: 14px 16px 0; margin: 0; font-size: 14px; font-weight: 800; color: #e4e6eb; }
 .crc-personal-section { margin-bottom: 16px; }
 #crc-page-tabs .crc-page-btn {
     padding-left: 5px;
     padding-right: 5px;
-    font-size: 14px;
+    font-size: 13px;
 }
 
 #crc-page-3 {
@@ -1214,7 +1214,7 @@ Controls padding, font, spacing, and appearance for all 3
     border-radius: 8px;
     background: #242526;
     color: #e4e6eb;
-    font-size: 15px;
+    font-size: 14px;
     line-height: 1.5;
     overflow-wrap: anywhere;
 }
@@ -1246,7 +1246,7 @@ Controls padding, font, spacing, and appearance for all 3
 }
 #crc-inquiry-date-filter[hidden] { display: none !important; }
 #crc-inquiry-date-filter label {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
 }
 #crc-inquiry-before-date {
@@ -1269,7 +1269,7 @@ Controls padding, font, spacing, and appearance for all 3
 }
 #crc-inquiry-date-summary {
     flex-basis: 100%;
-    font-size: 13px;
+    font-size: 12px;
     color: #b0b3b8;
 }
 
@@ -1288,7 +1288,7 @@ Controls padding, font, spacing, and appearance for all 3
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 15px;
+    font-size: 14px;
     font-weight: 800;
 }
 
@@ -1325,7 +1325,7 @@ Controls padding, font, spacing, and appearance for all 3
 
     color: #2d88ff;
 
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 800;
 
     text-transform: uppercase;
@@ -1340,7 +1340,7 @@ Controls padding, font, spacing, and appearance for all 3
 
     color: #6f7174;
 
-    font-size: 15px;
+    font-size: 14px;
 }
 
 
@@ -1401,7 +1401,7 @@ Controls padding, font, spacing, and appearance for all 3
 
     cursor: pointer;
 
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 800;
     line-height: 1;
 }
@@ -1444,7 +1444,7 @@ Controls padding, font, spacing, and appearance for all 3
 
     color: #e4e6eb;
 
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
 }
 
@@ -1485,7 +1485,7 @@ Controls padding, font, spacing, and appearance for all 3
 #crc-panel-opacity { flex: 1; width: 100%; accent-color: #3982e4; cursor: pointer; }
 #crc-panel-opacity-value { min-width: 54px; font-size: 18px; font-weight: 800; text-align: right; }
 #crc-alias-feedback, .crc-alias-card label, .crc-alias-card button { font-size: 16px; }
-#crc-negative-panel.crc-minimized #crc-top-bar { min-height: 68px; }
+#crc-negative-panel.crc-minimized #crc-top-bar { min-height: 58px; }
 
 @media (max-width: 600px) {
 
@@ -1501,7 +1501,7 @@ Controls padding, font, spacing, and appearance for all 3
 
 
     #crc-negative-panel.crc-minimized {
-        width: min(365px, calc(100vw - 20px));
+        width: min(300px, calc(100vw - 20px));
         height: auto;
         max-height: none;
     }
@@ -1551,10 +1551,10 @@ Controls padding, font, spacing, and appearance for all 3
                 <div class="crc-settings-section-title">Extractor appearance</div>
                 <label for="crc-panel-opacity">Extractor opacity</label>
                 <div id="crc-opacity-row">
-                    <input type="range" id="crc-panel-opacity" min="60" max="100" step="5" value="100" aria-label="Extractor opacity">
+                    <input type="range" id="crc-panel-opacity" min="60" max="100" step="1" value="100" aria-label="Extractor opacity">
                     <output id="crc-panel-opacity-value" for="crc-panel-opacity">100%</output>
                 </div>
-                <div class="crc-settings-note">Set how transparent the extractor appears, from 60% to 100%. Applies to expanded and minimized views and is saved on this device.</div>
+                <div class="crc-settings-note">Set how transparent the extractor appears, from 60% to 100% in 1% increments. Applies to expanded and minimized views and is saved on this device.</div>
 
                 <div class="crc-settings-section-title">Inquiry copy settings</div>
                 <label class="crc-settings-checkbox" for="crc-copy-connected-inquiries">
