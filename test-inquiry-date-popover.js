@@ -51,8 +51,7 @@ const render=(container,groups)=>{
 const run=new Function('document','panel','inquiriesDiv','inquiriesView',
     'inquiries','localStorage','CRC_INQUIRY_BEFORE_DATE_KEY',
     'filterInquiriesBeforeDate','renderInquiryBureauGroups','openInquiryAliasDialog',
-    'crcCopyConnectedInquiries',ui+
-    'let crcInquiryBeforeDate="";\n'+logic+
+    'crcCopyConnectedInquiries','let crcInquiryBeforeDate="";\n'+ui+logic+
     '\nreturn {dateFilterWrap,dateFilterToggle,dateFilterPopover,dateFilterInput,dateFilterClear,'+
     'dateFilterApply,dateFilterCancel,dateFilterSummary,dateFilterButtonLabel,'+
     'getResults:()=>copyTextOpenInquiries,getCutoff:()=>crcInquiryBeforeDate};');
