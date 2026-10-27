@@ -198,6 +198,23 @@ preview.setDisplayLayout('table');
 assert.equal(fakeStorage.get('tubol-crc-preview-layout-v1'),'table');
 assert.equal(preview.pages.personal.hidden,true,'Table mode hides card view');
 assert(doc.body.querySelector('.crc-preview-table-pane'));
+// The Table view must still expose the nested Disputed Mode categories
+// and inquiry subtabs, without returning to Grid first.
+preview.selectPage('negative');
+preview.selectNegativeMode('disputed');
+const tableSubnav=doc.body.querySelectorAll('.crc-preview-subnav')
+    .find(n=>n.attributes['aria-label']==='Table section filters');
+assert(tableSubnav,'Table mode must have accessible subnavigation');
+assert.equal(tableSubnav.hidden,false);
+const updatedTab=tableSubnav.children.find(n=>n.textContent==='Updated');
+assert(updatedTab,'Updated category must remain accessible in Table mode');
+await updatedTab.click();
+assert(preview.activeCopyText().includes('Updated Candidate'));
+preview.selectPage('inquiries');
+const openTab=tableSubnav.children.find(n=>n.textContent==='Open accounts');
+assert(openTab,'Open accounts subtab must remain accessible in Table mode');
+await openTab.click();
+assert.equal(preview.activeCopyText(),'OPEN ACCOUNT ORIGINAL');
 preview.setDisplayLayout('list');
 assert.equal(fakeStorage.get('tubol-crc-preview-layout-v1'),'list');
 assert.equal(preview.pages.personal.hidden,false);
