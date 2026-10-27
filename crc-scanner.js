@@ -3983,7 +3983,17 @@ function extractInquiries() {
                 if (query && !title.toLowerCase().includes(query) &&
                     !variations.some(n=>n.toLowerCase().includes(query))) continue;
                 const details=put(aliasGroups,make('details'));
-                put(details,make('summary','',title+' ('+variations.length+')'));
+                const summary=put(details,make('summary','',title+' ('+variations.length+')'));
+                if (CREDITOR_USER_GROUPS.some(custom=>custom.id===group.id)) {
+                    const deleteGroup=put(details,make('button','','Delete custom creditor'));
+                    deleteGroup.type='button';
+                    deleteGroup.addEventListener('click',()=>{
+                        if (!previewWindow.confirm('Delete custom creditor "'+title+'" and its variations?')) return;
+                        const result=deleteUserCreditorGroup(group.id);
+                        aliasFeedback.textContent=result.message;
+                        if (result.ok) notifyAliasChanged();
+                    });
+                }
                 variations.forEach(variant=>{
                     const row=put(details,make('div',''));
                     row.style.display='flex';row.style.justifyContent='space-between';
@@ -4336,7 +4346,7 @@ function extractInquiries() {
                 if (negativeMode === 'disputed') {
                     const items = snapshot.disputeCategories[disputedCategory] || [];
                     return {
-                        headers:['Creditor','Type','Account # / Reference','Balance / Status','Other reported data'],
+                        headers:['Creditor','Type','Account number / Reference','Balance / Filed date','Other reported data'],
                         rows:items.map(item => {
                             const groups=getDisputeFieldGroups(item);
                             return [
@@ -4477,7 +4487,8 @@ function extractInquiries() {
         setDisplayLayout(displayLayout);
         previewWindow.focus();
         return { doc, pages, selectPage, selectNegativeMode, selectInquiryMode,
-            selectDisputedCategory, activeCopyText, setDisplayLayout, currentTableModel };
+            selectDisputedCategory, activeCopyText, setDisplayLayout, currentTableModel,
+            applySetting, refreshPreviewContent, setSettingsVisible };
     }
 
     function showResults(negativeData) {
@@ -5430,6 +5441,7 @@ function extractInquiries() {
                     inquiries,
                     newInquiries,
                     openAccounts,
+                    openAccountsByBureau,
                     previousAddresses,
                     employers,
                     settings: {
