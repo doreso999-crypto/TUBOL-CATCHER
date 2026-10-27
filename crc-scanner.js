@@ -3754,6 +3754,8 @@ function extractInquiries() {
         disputeNav.setAttribute('role','tablist');
         const disputeLabels = {delete:'Delete',updated:'Updated',bankruptcy:'Bankruptcy'};
         const disputeButtons = new Map();
+        addIntro(negativePanes.disputed,
+            'All bureau values; identical values share labels. Expand Other reported data to see additional fields.');
         const disputeContent = put(negativePanes.disputed, make('div'));
         disputeContent.id = 'crc-dispute-results';
         ['delete','updated','bankruptcy'].forEach(key => {
@@ -3761,9 +3763,6 @@ function extractInquiries() {
             disputeButtons.set(key,makeTab(disputeNav,disputeLabels[key] + ' (' + count + ')',
                 ()=>selectDisputedCategory(key)));
         });
-        addIntro(negativePanes.disputed,
-            'All bureau values; identical values share labels. Expand Other reported data to see additional fields.');
-
         function selectDisputedCategory(name) {
             disputedCategory = name;
             markSelected(disputeButtons, name);
@@ -3786,13 +3785,15 @@ function extractInquiries() {
 
         // INQUIRIES: separate regular, open-account and new lists. Filters and
         // copy preferences are snapshotted; no report data goes into storage.
-        const inquiryNav = put(pages.inquiries, make('div','crc-preview-subnav'));
+        const inquiryRoot = put(pages.inquiries, make('div'));
+        inquiryRoot.id = 'crc-inquiries';
+        const inquiryNav = put(inquiryRoot, make('div','crc-preview-subnav'));
         inquiryNav.setAttribute('role','tablist');
         const inquiryTabs = new Map();
         const inquiryPanes = {
-            inquiries: makePane(pages.inquiries),
-            open: makePane(pages.inquiries),
-            new: makePane(pages.inquiries)
+            inquiries: makePane(inquiryRoot),
+            open: makePane(inquiryRoot),
+            new: makePane(inquiryRoot)
         };
         const dateNote = snapshot.beforeDate
             ? 'Showing inquiries dated before ' + snapshot.beforeDate + ' (selected date excluded).'
