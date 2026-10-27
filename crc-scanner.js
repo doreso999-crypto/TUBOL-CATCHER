@@ -1233,45 +1233,128 @@ Controls padding, font, spacing, and appearance for all 3
 /* =========================================================
    INQUIRIES SUBTABS
    ========================================================= */
+#crc-inquiries {
+    position: relative;
+}
+/* One quiet toolbar row; the editing popover overlays rather than
+   pushes the bureau list down or steals focus while scrolling. */
 #crc-inquiry-date-filter {
+    position: relative;
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
     gap: 8px;
-    margin: 8px 4px 14px;
-    padding: 12px;
-    background: #232426;
-    border: 1px solid #424446;
-    border-radius: 10px;
+    min-width: 0;
+    margin: 2px 4px 10px;
+    padding: 0;
 }
 #crc-inquiry-date-filter[hidden] { display: none !important; }
-#crc-inquiry-date-filter label {
+#crc-inquiry-date-toggle {
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 73%;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 10px;
+    border: 1px solid #555a63;
+    border-radius: 9px;
+    background: #24282e;
+    color: #e4e6eb;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+#crc-inquiry-date-toggle:hover, #crc-inquiry-date-toggle[aria-expanded="true"] {
+    background: #313841;
+    border-color: #7197c7;
+}
+#crc-inquiry-date-toggle.crc-date-active {
+    color: #c6dcff;
+    background: #26364b;
+    border-color: #426b9d;
+}
+#crc-inquiry-date-toggle .crc-date-button-label {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+#crc-inquiry-date-summary {
+    flex: 1;
+    text-align: right;
+    white-space: nowrap;
+    font-size: 12px;
+    color: #adb6c1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+#crc-inquiry-date-popover {
+    position: absolute;
+    top: calc(100% + 7px);
+    left: 0;
+    z-index: 40;
+    width: min(325px, 100%);
+    box-sizing: border-box;
+    padding: 15px;
+    background: #292d33;
+    border: 1px solid #59616b;
+    border-radius: 12px;
+    box-shadow: 0 12px 30px rgba(0,0,0,.55);
+}
+#crc-inquiry-date-popover[hidden] { display: none !important; }
+#crc-inquiry-date-popover label {
+    display: block;
+    margin-bottom: 8px;
+    color: #f3f4f6;
+    font-size: 14px;
+    font-weight: 750;
+}
+#crc-inquiry-before-date {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 42px;
+    padding: 9px 12px;
+    background: #181c22;
+    color: #e4e6eb;
+    border: 1px solid #6a727e;
+    border-radius: 8px;
+    font-size: 15px;
+    color-scheme: dark;
+}
+#crc-inquiry-before-date:focus-visible, #crc-inquiry-date-toggle:focus-visible,
+.crc-date-popover-actions button:focus-visible {
+    outline: 2px solid #8bb7fa;
+    outline-offset: 2px;
+}
+.crc-date-help {
+    margin: 9px 0 13px;
+    color: #bac1ca;
+    font-size: 12px;
+    line-height: 1.45;
+}
+.crc-date-popover-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+.crc-date-popover-actions button {
+    padding: 9px 12px;
+    border-radius: 8px;
+    border: 1px solid #59616b;
+    background: #393e45;
+    color: #eceff3;
+    cursor: pointer;
     font-size: 13px;
     font-weight: 700;
 }
-#crc-inquiry-before-date {
-    color: #e4e6eb;
-    background: #18191a;
-    border: 1px solid #57595d;
-    border-radius: 6px;
-    padding: 7px;
-    min-height: 34px;
-    box-sizing: border-box;
-    color-scheme: dark;
+.crc-date-popover-actions .crc-date-apply {
+    background: #2374e1;
+    border-color: #2374e1;
+    color: white;
 }
-#crc-inquiry-date-clear {
-    border: 1px solid #666;
-    border-radius: 6px;
-    color: #e4e6eb;
-    background: #3a3b3c;
-    padding: 8px 12px;
-    cursor: pointer;
-}
-#crc-inquiry-date-summary {
-    flex-basis: 100%;
-    font-size: 12px;
-    color: #b0b3b8;
-}
+#crc-inquiry-date-clear { margin-right: auto; }
 
 
 .crc-subtabs {
