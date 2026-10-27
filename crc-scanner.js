@@ -3620,6 +3620,256 @@ function extractInquiries() {
         return { reclamp, keepTopRightAnchor, savePosition, destroy };
     }
 
+    // Render a readable, self-contained snapshot from the current extraction.
+    // Never persist report data in localStorage, a URL, or a remote service.
+    // The button opens about:blank synchronously inside its click handler to
+    // avoid popup blockers; only local DOM/text nodes cross into the new tab.
+    function renderFullPageReportPreview(previewWindow, snapshot) {
+        const doc = previewWindow.document;
+        doc.open();
+        doc.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TUBOL CATCHER - Report Preview</title></head><body></body></html>');
+        doc.close();
+
+        const style = doc.createElement('style');
+        style.textContent = CSS_STYLES + '\n' + CRC_FULL_PREVIEW_CSS;
+        doc.head.appendChild(style);
+
+        function make(tag, className, text) {
+            const item = doc.createElement(tag);
+            if (className) item.className = className;
+            if (text !== undefined) item.textContent = text;
+            return item;
+        }
+        function put(parent, child) {
+            parent.appendChild(child);
+            return child;
+        }
+        function makeTab(parent, label, setSelected) {
+            const button = put(parent, make('button', 'crc-preview-tab', label));
+            button.type = 'button';
+            button.setAttribute('role', 'tab');
+            button.addEventListener('click', setSelected);
+            return button;
+        }
+        function markSelected(buttons, current) {
+            buttons.forEach((button, key) => {
+                const active = key === current;
+                button.classList.toggle('active', active);
+                button.setAttribute('aria-selected', String(active));
+            });
+        }
+        function makePane(parent, className) {
+            const pane = put(parent, make('section', 'crc-preview-pane' + (className ? ' ' + className : '')));
+            pane.hidden = true;
+            return pane;
+        }
+        function addIntro(parent, text) {
+            return put(parent, make('p', 'crc-preview-intro', text));
+        }
+        // Cloning extracted DOM preserves its text formatting without
+        // copying interactive handlers from the small extractor. Native
+        // <details> still expands; bureau headers get new handlers below.
+        function cloneList(original, parent) {
+            const node = original.cloneNode(true);
+            node.style.display = '';
+            node.hidden = false;
+            node.querySelectorAll('.crc-collapsed').forEach(section => {
+                section.classList.remove('crc-collapsed');
+            });
+            node.querySelectorAll('.crc-inquiry-row, .crc-open-account').forEach(card => {
+                card.removeAttribute('title'); // Alias editing happens in the original tab.
+            });
+            node.querySelector('#crc-open-accounts-copy-all')?.remove();
+            node.querySelectorAll('.crc-inquiry-bureau').forEach(header => {
+                const section = header.closest('.crc-inquiry-section');
+                if (!section) return;
+                header.setAttribute('role', 'button');
+                header.setAttribute('tabindex', '0');
+                header.setAttribute('aria-expanded', 'true');
+                const toggle = () => {
+                    const collapsed = section.classList.toggle('crc-collapsed');
+                    header.setAttribute('aria-expanded', String(!collapsed));
+                };
+                header.addEventListener('click', toggle);
+                header.addEventListener('keydown', event => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        toggle();
+                    }
+                });
+            });
+            parent.appendChild(node);
+            return node;
+        }
+
+        const root = put(doc.body, make('div', 'crc-preview-page'));
+        root.id = 'crc-negative-panel';
+        const layout = put(root, make('main', 'crc-preview-layout'));
+        const header = put(layout, make('header', 'crc-preview-header'));
+        const titleBox = put(header, make('div'));
+        put(titleBox, make('div', 'crc-preview-kicker', 'TUBOL CATCHER'));
+        put(titleBox, make('h1', '', 'Full-page report preview'));
+        put(titleBox, make('div', 'crc-preview-meta',
+            'Snapshot from your current report · ' + new Date().toLocaleString()));
+        const copyButton = put(put(header, make('div', 'crc-preview-actions')),
+            make('button', 'crc-preview-copy', 'Copy current view'));
+        copyButton.type = 'button';
+
+        const nav = put(layout, make('nav', 'crc-preview-nav'));
+        nav.setAttribute('aria-label', 'Report sections');
+        nav.setAttribute('role', 'tablist');
+        const pageNames = ['negative', 'inquiries', 'personal'];
+        const pageLabels = { negative: 'Negative accounts', inquiries: 'Inquiries', personal: 'Personal info' };
+        const pages = {};
+        const mainTabs = new Map();
+        let activePage = pageNames.includes(snapshot.activePage) ? snapshot.activePage : 'negative';
+        let negativeMode = snapshot.negativeMode === 'disputed' ? 'disputed' : 'standard';
+        let disputedCategory = ['delete','updated','bankruptcy'].includes(snapshot.disputedCategory)
+            ? snapshot.disputedCategory : 'delete';
+        let inquiryMode = ['inquiries','open','new'].includes(snapshot.inquiryMode)
+            ? snapshot.inquiryMode : 'inquiries';
+
+        pageNames.forEach(name => {
+            pages[name] = makePane(layout, 'crc-preview-view');
+            pages[name].setAttribute('role', 'tabpanel');
+            mainTabs.set(name, makeTab(nav, pageLabels[name], () => selectPage(name)));
+        });
+
+        // NEGATIVE: the same normal display plus all three Disputed Mode
+        // categories, which are built from full bureau data on demand.
+        const negativeTabsNav = put(pages.negative, make('div', 'crc-preview-subnav'));
+        negativeTabsNav.setAttribute('role','tablist');
+        const negativeTabs = new Map();
+        const negativePanes = {
+            standard: makePane(pages.negative),
+            disputed: makePane(pages.negative)
+        };
+        negativeTabs.set('standard', makeTab(negativeTabsNav,'All accounts',()=>selectNegativeMode('standard')));
+        negativeTabs.set('disputed', makeTab(negativeTabsNav,'Disputed Mode',()=>selectNegativeMode('disputed')));
+        addIntro(negativePanes.standard,
+            'Preferred-bureau summary from the extractor. Use Settings in the original tab to change priority.');
+        cloneList(snapshot.negativeResults, negativePanes.standard);
+
+        const disputeNav = put(negativePanes.disputed, make('div', 'crc-preview-subnav'));
+        disputeNav.setAttribute('role','tablist');
+        const disputeLabels = {delete:'Delete',updated:'Updated',bankruptcy:'Bankruptcy'};
+        const disputeButtons = new Map();
+        const disputeContent = put(negativePanes.disputed, make('div'));
+        disputeContent.id = 'crc-dispute-results';
+        ['delete','updated','bankruptcy'].forEach(key => {
+            const count = (snapshot.disputeCategories[key] || []).length;
+            disputeButtons.set(key,makeTab(disputeNav,disputeLabels[key] + ' (' + count + ')',
+                ()=>selectDisputedCategory(key)));
+        });
+        addIntro(negativePanes.disputed,
+            'All bureau values; identical values share labels. Expand Other reported data to see additional fields.');
+
+        function selectDisputedCategory(name) {
+            disputedCategory = name;
+            markSelected(disputeButtons, name);
+            disputeContent.replaceChildren();
+            const items = snapshot.disputeCategories[name] || [];
+            if (!items.length) {
+                put(disputeContent, make('div','crc-dispute-empty', 'No ' + name + ' records in this snapshot.'));
+            } else {
+                const fragment = doc.createDocumentFragment();
+                items.forEach(item => fragment.appendChild(renderDisputeAccountCard(item)));
+                disputeContent.appendChild(fragment);
+            }
+        }
+        function selectNegativeMode(name) {
+            negativeMode = name;
+            markSelected(negativeTabs,name);
+            for (const [key,pane] of Object.entries(negativePanes)) pane.hidden = key !== name;
+            if (name === 'disputed') selectDisputedCategory(disputedCategory);
+        }
+
+        // INQUIRIES: separate regular, open-account and new lists. Filters and
+        // copy preferences are snapshotted; no report data goes into storage.
+        const inquiryNav = put(pages.inquiries, make('div','crc-preview-subnav'));
+        inquiryNav.setAttribute('role','tablist');
+        const inquiryTabs = new Map();
+        const inquiryPanes = {
+            inquiries: makePane(pages.inquiries),
+            open: makePane(pages.inquiries),
+            new: makePane(pages.inquiries)
+        };
+        const dateNote = snapshot.beforeDate
+            ? 'Showing inquiries dated before ' + snapshot.beforeDate + ' (selected date excluded).'
+            : 'Showing all extracted inquiries.';
+        addIntro(inquiryPanes.inquiries,
+            dateNote + ' Change the date filter in the original extractor and reopen this preview to refresh.');
+        cloneList(snapshot.inquiriesView,put(inquiryPanes.inquiries,make('div')).appendChild(make('div')));
+        addIntro(inquiryPanes.open,'All open accounts from the extracted report.');
+        cloneList(snapshot.openAccountsView,inquiryPanes.open);
+        addIntro(inquiryPanes.new,'Recent inquiries (last 35 days) from the extracted report.');
+        cloneList(snapshot.newInquiriesView,inquiryPanes.new);
+        inquiryTabs.set('inquiries',makeTab(inquiryNav,'Inquiries',()=>selectInquiryMode('inquiries')));
+        inquiryTabs.set('open',makeTab(inquiryNav,'Open accounts',()=>selectInquiryMode('open')));
+        inquiryTabs.set('new',makeTab(inquiryNav,'New inquiries',()=>selectInquiryMode('new')));
+        function selectInquiryMode(name) {
+            inquiryMode = name;
+            markSelected(inquiryTabs,name);
+            Object.entries(inquiryPanes).forEach(([key,pane]) => { pane.hidden = key !== name; });
+        }
+
+        // PERSONAL INFO: retain bureau-grouped previous addresses and employers.
+        const personalAddresses = put(pages.personal,make('section','crc-personal-section'));
+        put(personalAddresses,make('h2','crc-personal-heading','PREVIOUS ADDRESSES'));
+        cloneList(snapshot.addressesView,personalAddresses);
+        const personalEmployers = put(pages.personal,make('section','crc-personal-section'));
+        put(personalEmployers,make('h2','crc-personal-heading','EMPLOYERS'));
+        cloneList(snapshot.employersView,personalEmployers);
+
+        put(layout,make('footer','crc-preview-footer',
+            'Private, local snapshot. This tab does not automatically refresh; reopen it from TUBOL CATCHER after rescanning or changing settings. No report values are placed in browser storage or sent to a server by the preview.'));
+
+        function selectPage(name) {
+            activePage = name;
+            markSelected(mainTabs,name);
+            Object.entries(pages).forEach(([key,pane]) => { pane.hidden = key !== name; });
+        }
+        function activeCopyText() {
+            if (activePage === 'personal') return snapshot.copyPersonalInfo;
+            if (activePage === 'inquiries') return inquiryMode === 'open'
+                ? snapshot.copyOpenAccounts
+                : inquiryMode === 'new' ? snapshot.copyNewInquiries : snapshot.copyInquiries;
+            return negativeMode === 'standard'
+                ? snapshot.copyNegative
+                : (snapshot.disputeCategories[disputedCategory] || [])
+                    .map(formatDisputedAccountCopy).join('\n\n');
+        }
+        copyButton.addEventListener('click', async () => {
+            const copy = activeCopyText();
+            let copied = false;
+            try {
+                await previewWindow.navigator.clipboard.writeText(copy || '');
+                copied = true;
+            } catch (_) {
+                // Clipboard API can be unavailable on an about:blank tab.
+                const textarea = make('textarea');
+                textarea.value = copy || '';
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                doc.body.appendChild(textarea);
+                textarea.select();
+                try { copied = Boolean(doc.execCommand('copy')); } catch (_) { /* blocked */ }
+                textarea.remove();
+            }
+            copyButton.textContent = copied ? 'Copied' : 'Copy blocked by browser';
+            previewWindow.setTimeout(() => {
+                if (!previewWindow.closed) copyButton.textContent = 'Copy current view';
+            }, 1500);
+        });
+
+        selectNegativeMode(negativeMode);
+        selectInquiryMode(inquiryMode);
+        selectPage(activePage);
+        previewWindow.focus();
+        return { doc, pages, selectPage, selectNegativeMode, selectInquiryMode,
+            selectDisputedCategory, activeCopyText };
+    }
+
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
         const bankruptcyTables = extractBankruptcyTables();
