@@ -1,5 +1,32 @@
 # TUBOL-CATCHER
 
+## Extractor appearance and dragging (v4.4)
+
+- **Bigger extractor:** The main panel is now 580px wide (previously 440px)
+  and can use up to 92% of the viewport height, while staying within smaller
+  screens. Main panel text, navigation, copied-item cards, and controls use
+  larger fonts.
+- **Readable Settings:** The Settings window has independently enlarged text
+  (for example, 26px headings, 17px labels, and 18px settings tabs) so its
+  contents no longer appear tiny inside the larger window.
+- **Opacity:** Go to **Settings → General → Extractor appearance** and drag
+  the **Extractor opacity** slider from 60% (more see-through) to 100%
+  (fully opaque). The change is immediate, applies to both normal and
+  minimized views, and is saved in the browser.
+- **Move the entire floating panel:** Drag the top bar where it says
+  **DRAG TO MOVE** or any empty area of that bar. This works when the
+  extractor is **expanded or minimized**. Buttons, selections, scrolling,
+  and right-click menus keep their normal behavior.
+- **Position memory:** The window remembers its position across rescans
+  and page reloads. Position is clamped after dragging, resizing the browser,
+  or minimizing/restoring so the extractor remains accessible.
+
+The chosen opacity and window coordinates are browser-local UI preferences.
+No credit-report data is stored with these controls.
+
+Run `node test-extractor-appearance.js` to validate opacity, dragging,
+viewport bounds, saved position, and expanded/minimized behavior.
+
 ## Negative tab: Collection vs Charge Off (v4.3)
 
 The scanner classifies a negative account using its creditor name and the

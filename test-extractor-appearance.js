@@ -1,0 +1,142 @@
+/* node test-extractor-appearance.js
+ * Regression tests for draggable expanded/minimized extractor and opacity.
+ */
+'use strict';
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const source = fs.readFileSync(path.join(__dirname, 'crc-scanner.js'), 'utf8');
+function slice(begin, end) {
+    const start = source.indexOf(begin);
+    const finish = source.indexOf(end, start);
+    assert(start >= 0 && finish > start, 'Missing source section: ' + begin);
+    return source.slice(start, finish);
+}
+const appearanceCode = slice("    const CRC_PANEL_OPACITY_KEY", "    function loadCrcBoolSetting");
+const movingCode = slice("    // Keep a floating panel fully on screen", "    function showResults(negativeData) {");
+
+const storage = new Map();
+const localStorage = {
+    getItem: key => storage.has(key) ? storage.get(key) : null,
+    setItem: (key, val) => storage.set(key, val),
+    removeItem: key => storage.delete(key)
+};
+const appearance = new Function('localStorage', appearanceCode +
+    '\nreturn {clampPanelOpacity,getSavedPanelOpacity,applyPanelOpacity};')(localStorage);
+assert.equal(appearance.getSavedPanelOpacity(), 100);
+assert.equal(appearance.clampPanelOpacity(10), 60);
+assert.equal(appearance.clampPanelOpacity(200), 100);
+assert.equal(appearance.clampPanelOpacity('NaN'), 100);
+const faded = { style: {} };
+assert.equal(appearance.applyPanelOpacity(faded, 75), 75);
+assert.equal(faded.style.opacity, '0.75');
+assert.equal(appearance.getSavedPanelOpacity(), 75);
+storage.set('tubol-crc-panel-opacity', '-500');
+assert.equal(appearance.getSavedPanelOpacity(), 60);
+storage.delete('tubol-crc-panel-opacity');
+
+const listeners = {};
+const window = {
+    innerWidth: 1280,
+    innerHeight: 900,
+    addEventListener(type, fn) { (listeners[type] ??= new Set()).add(fn); },
+    removeEventListener(type, fn) { listeners[type]?.delete(fn); }
+};
+const document = { documentElement: { clientWidth: 1280, clientHeight: 900 } };
+const drag = new Function('window','document','localStorage', 'CRC_PANEL_POSITION_KEY', movingCode +
+    '\nreturn {clampExtractorPosition,installExtractorDragging};')(
+        window,document,localStorage,'tubol-crc-panel-position-v1'
+    );
+assert.deepEqual(drag.clampExtractorPosition(-50, 1000, 580, 720, 1280, 900), { left: 0, top: 180 });
+function makePanel() {
+    let minimized = false;
+    const events = {};
+    const draggingClasses = new Set();
+    const bar = {
+        events, classList: { add(x){draggingClasses.add(x)},remove(x){draggingClasses.delete(x)} },
+        addEventListener(type, fn) { events[type]=fn; },
+        removeEventListener(type) { delete events[type]; },
+        setPointerCapture(id) { this.pointerCaptured=id; },
+        hasPointerCapture(id) { return this.pointerCaptured === id; },
+        releasePointerCapture() { this.pointerCaptured=null; }
+    };
+    const panel = {
+        style: {}, bar,
+        set minimized(value){minimized=value}, get minimized(){return minimized},
+        querySelector(selector) {
+            if(selector==='#crc-top-bar') return bar;
+            if(selector==='#crc-settings-menu') return {hidden:true};
+            throw new Error('Unexpected selector: '+selector);
+        },
+        getBoundingClientRect() {
+            const width = minimized ? 365 : 580, height = minimized ? 68 : 720;
+            const left = this.style.left ? parseFloat(this.style.left) : window.innerWidth - width - 20;
+            const top = this.style.top ? parseFloat(this.style.top) : 20;
+            return {left,top,width,height,right:left+width,bottom:top+height};
+        }
+    };
+    return panel;
+}
+function event(pointerId, clientX, clientY, control = false, button = 0) {
+    return {
+        pointerId, clientX,clientY,button,
+        target: {closest() {return control ? {} : null}},
+        preventDefault() {this.prevented=true}
+    };
+}
+const p = makePanel();
+const controller = drag.installExtractorDragging(p);
+assert.equal(p.style.left,'680px');
+assert.equal(p.style.top,'20px');
+assert.equal(listeners.resize.size,1);
+p.bar.events.pointerdown(event(1,760,35,true));
+assert.equal(p.style.left,'680px', 'Button must not start dragging');
+const start = event(2,760,35);
+p.bar.events.pointerdown(start);
+assert.equal(start.prevented,true);
+p.bar.events.pointermove(event(2,2000,1200));
+assert.equal(p.style.left,'700px');
+assert.equal(p.style.top,'180px');
+p.bar.events.pointerup(event(2,2000,1200));
+assert.deepEqual(JSON.parse(storage.get('tubol-crc-panel-position-v1')), {left:700,top:180});
+p.minimized=true;
+controller.reclamp();
+assert.equal(p.style.left,'700px','Minimize retains position');
+p.bar.events.pointerdown(event(3,1000,205));
+p.bar.events.pointermove(event(3,0,0));
+p.bar.events.pointerup(event(3,0,0));
+assert.equal(p.style.left,'0px');
+assert.equal(p.style.top,'0px');
+p.minimized=false;
+controller.reclamp();
+assert.equal(p.style.left,'0px');
+window.innerWidth=480;
+window.innerHeight=560;
+const resize=Array.from(listeners.resize)[0];
+resize();
+assert.equal(p.style.left,'0px');
+assert.equal(p.style.top,'0px');
+controller.destroy();
+assert.equal(listeners.resize.size,0);
+
+const loaded = makePanel();
+const newController=drag.installExtractorDragging(loaded);
+assert.equal(loaded.style.left,'0px','Position should survive re-initialization');
+newController.destroy();
+assert.equal(listeners.resize.size,0);
+
+assert(source.includes('id="crc-panel-opacity"'));
+assert(source.includes("panelOpacityInput.addEventListener('input'"));
+assert(source.includes('width: 580px;'));
+assert(source.includes('width: 365px;'));
+assert(source.includes('DRAG TO MOVE'));
+assert(source.includes('#crc-settings-menu .crc-settings-note { font-size: 15px;'));
+assert(source.includes('#crc-settings-menu .crc-settings-heading { font-size: 26px;'));
+assert(source.includes('#crc-negative-panel.crc-minimized .crc-stat-row-wrapper'));
+
+const template = slice('    const HTML_TEMPLATE = \`',
+    '    // ========================================\n    // JAVASCRIPT FUNCTIONS');
+const barEnd=template.indexOf('        </div>\n\n',template.indexOf('<div id="crc-top-bar">'));
+const backdrop=template.indexOf('id="crc-settings-backdrop"');
+assert(backdrop > barEnd, 'Settings must be outside the draggable header');
+console.log('PASS: larger fonts and panel, saved opacity, draggable top bar in both states, bounds, resize, persistence, safe buttons');
