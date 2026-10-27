@@ -3799,7 +3799,7 @@ function extractInquiries() {
             : 'Showing all extracted inquiries.';
         addIntro(inquiryPanes.inquiries,
             dateNote + ' Change the date filter in the original extractor and reopen this preview to refresh.');
-        cloneList(snapshot.inquiriesView,put(inquiryPanes.inquiries,make('div')).appendChild(make('div')));
+        cloneList(snapshot.inquiriesView,inquiryPanes.inquiries);
         addIntro(inquiryPanes.open,'All open accounts from the extracted report.');
         cloneList(snapshot.openAccountsView,inquiryPanes.open);
         addIntro(inquiryPanes.new,'Recent inquiries (last 35 days) from the extracted report.');
@@ -4791,6 +4791,43 @@ function extractInquiries() {
             this.textContent = "✓ COPIED";
             setTimeout(() => { this.textContent = "COPY PERSONAL INFO"; }, 1500);
         };
+
+        panel.querySelector('#crc-open-preview-btn').addEventListener('click', () => {
+            // Window.open must run directly from this click, before any awaits.
+            // An empty same-origin tab never exposes the report through a URL.
+            const previewWindow = window.open('about:blank', '_blank');
+            if (!previewWindow) {
+                window.alert('Your browser blocked the new tab. Allow pop-ups for Credit Repair Cloud, then try again.');
+                return;
+            }
+            try {
+                renderFullPageReportPreview(previewWindow, {
+                    negativeResults: results,
+                    disputeCategories,
+                    inquiriesView,
+                    openAccountsView,
+                    newInquiriesView,
+                    addressesView: addressesDiv,
+                    employersView: employersDiv,
+                    copyNegative: copyTextNegative,
+                    copyInquiries: copyTextOpenInquiries,
+                    copyOpenAccounts: copyTextOpenAccounts,
+                    copyNewInquiries: copyTextNewInquiries,
+                    copyPersonalInfo: copyTextPersonalInfo,
+                    beforeDate: crcInquiryBeforeDate,
+                    activePage: buttons[2].classList.contains('active') ? 'personal'
+                        : buttons[1].classList.contains('active') ? 'inquiries' : 'negative',
+                    negativeMode: disputedModeActive ? 'disputed' : 'standard',
+                    disputedCategory: disputeCategory,
+                    inquiryMode: btnOpenAccounts.classList.contains('active') ? 'open'
+                        : btnNewInquiries.classList.contains('active') ? 'new' : 'inquiries'
+                });
+            } catch (err) {
+                console.error('Unable to open full-page report preview:', err);
+                try { previewWindow.close(); } catch (_) { /* Browser controls the tab. */ }
+                window.alert('The preview could not be opened. Your extractor is still available.');
+            }
+        });
     }
 
     // ========================================
