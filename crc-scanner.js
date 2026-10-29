@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.2
+// @version      5.3
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -4536,34 +4536,130 @@ function extractInquiries() {
             applySetting, refreshPreviewContent, setSettingsVisible };
     }
 
-    // Read the current client from Credit Repair Cloud's report title:
-    // <h1>Preview Credit Report <span>(Client Name)</span></h1>.
-    // Do not depend on generated MUI CSS classes or guess from a creditor name.
+    // The report title may be injected asynchronously or rendered inside
+    // an accessible iframe. Read the semantic heading, not generated MUI classes.
+    // Never infer a name from account data, URL parameters, or another client.
     function getClientNameFromReportHeading(reportDocument = document) {
+        if (!reportDocument || typeof reportDocument.querySelectorAll !== 'function') return '';
         const headings = reportDocument.querySelectorAll('h1');
         for (const heading of headings) {
             const text = String(heading.textContent || '').replace(/\s+/g, ' ').trim();
-            if (!/^Preview Credit Report\b/i.test(text)) continue;
-            for (const span of heading.querySelectorAll('span')) {
+            if (!/^Preview\s+Credit\s+Report\b/i.test(text)) continue;
+            // Supplied CRC markup: <h1>Preview Credit Report <span>(Name)</span></h1>
+            const spans = typeof heading.querySelectorAll === 'function'
+                ? heading.querySelectorAll('span') : [];
+            for (const span of spans) {
                 const match = String(span.textContent || '').match(/^\s*\(\s*([^()]+?)\s*\)\s*$/);
                 if (!match) continue;
                 const name = match[1].replace(/\s+/g, ' ').trim();
+                if (name && name.length <= 120) return name;
+            }
+            // Some renders omit <span> or split its text into adjacent nodes.
+            const inline = text.match(/^Preview\s+Credit\s+Report\s*[:\-–]?\s*\(\s*([^()]+?)\s*\)\s*$/i);
+            if (inline) {
+                const name = inline[1].replace(/\s+/g, ' ').trim();
                 if (name && name.length <= 120) return name;
             }
         }
         return '';
     }
 
-    function setExtractorClientHeading(panel, reportDocument = document) {
+    // Search only the current page, its accessible embedded report frames,
+    // and a same-origin parent/top document. Cross-origin frames cannot be
+    // inspected by a userscript and are safely skipped.
+    function getClientReportContexts(reportDocument = document, reportWindow = window) {
+        const documents = [], frames = [], seen = new Set();
+        function addDocument(doc) {
+            if (!doc || seen.has(doc) || documents.length >= 25 ||
+                typeof doc.querySelectorAll !== 'function') return;
+            seen.add(doc);
+            documents.push(doc);
+            for (const frame of doc.querySelectorAll('iframe, frame')) {
+                frames.push(frame);
+                try { addDocument(frame.contentDocument); }
+                catch (_) { /* Cross-origin or not yet loaded. */ }
+            }
+        }
+        addDocument(reportDocument);
+        try {
+            if (reportWindow.parent && reportWindow.parent !== reportWindow)
+                addDocument(reportWindow.parent.document);
+        } catch (_) { /* Cross-origin parent. */ }
+        try {
+            if (reportWindow.top && reportWindow.top !== reportWindow)
+                addDocument(reportWindow.top.document);
+        } catch (_) { /* Cross-origin top. */ }
+        return { documents, frames };
+    }
+
+    function getCurrentClientName(reportDocument = document, reportWindow = window) {
+        const contexts = getClientReportContexts(reportDocument, reportWindow);
+        for (const doc of contexts.documents) {
+            const name = getClientNameFromReportHeading(doc);
+            if (name) return name;
+        }
+        return '';
+    }
+
+    function setExtractorClientHeading(panel, reportDocument = document, reportWindow = window) {
         const handle = panel.querySelector('#crc-drag-handle');
         if (!handle) return '';
-        const clientName = getClientNameFromReportHeading(reportDocument);
-        // Never display a name from an unrelated account or previous client.
-        handle.textContent = clientName || 'CLIENT REPORT';
+        const clientName = getCurrentClientName(reportDocument, reportWindow);
+        // textContent prevents markup injection and never caches a prior name.
+        const label = clientName || 'CLIENT REPORT';
+        if (handle.textContent !== label) handle.textContent = label;
         handle.title = clientName
             ? clientName + ' · Drag the top bar to move the extractor'
             : 'Client name not found · Drag the top bar to move the extractor';
         return clientName;
+    }
+
+    function watchExtractorClientHeading(panel, reportDocument = document, reportWindow = window) {
+        setExtractorClientHeading(panel, reportDocument, reportWindow);
+        const Observer = reportWindow.MutationObserver;
+        if (typeof Observer !== 'function') return () => {};
+        const observers = new Map();
+        const listeningFrames = new Set();
+        let disposed = false, refreshPending = false;
+        const refresh = () => {
+            if (disposed || refreshPending) return;
+            refreshPending = true;
+            Promise.resolve().then(() => {
+                refreshPending = false;
+                if (disposed || panel.isConnected === false) return;
+                const contexts = getClientReportContexts(reportDocument, reportWindow);
+                for (const doc of contexts.documents) {
+                    if (observers.has(doc) || !doc.documentElement) continue;
+                    try {
+                        const observer = new Observer(mutations => {
+                            if (mutations.every(m => {
+                                const node = m.target;
+                                return typeof panel.contains === 'function' && panel.contains(node);
+                            })) return; // Updating our own header must not trigger a loop.
+                            refresh();
+                        });
+                        observer.observe(doc.documentElement, {
+                            childList: true, subtree: true, characterData: true
+                        });
+                        observers.set(doc, observer);
+                    } catch (_) { /* Inaccessible or transient document. */ }
+                }
+                for (const frame of contexts.frames) {
+                    if (listeningFrames.has(frame) || typeof frame.addEventListener !== 'function') continue;
+                    frame.addEventListener('load', refresh);
+                    listeningFrames.add(frame);
+                }
+                setExtractorClientHeading(panel, reportDocument, reportWindow);
+            });
+        };
+        refresh();
+        return () => {
+            disposed = true;
+            observers.forEach(observer => observer.disconnect());
+            for (const frame of listeningFrames) frame.removeEventListener('load', refresh);
+            observers.clear();
+            listeningFrames.clear();
+        };
     }
 
     function showResults(negativeData) {
@@ -4605,6 +4701,7 @@ function extractInquiries() {
 
         let old = document.getElementById("crc-negative-panel");
         if (old) {
+            old.__crcDisposeClientHeading?.();
             old.__crcDisposeDrag?.();
             old.remove();
         }
@@ -4612,9 +4709,9 @@ function extractInquiries() {
         let panel = document.createElement("div");
         panel.id = "crc-negative-panel";
         panel.innerHTML = HTML_TEMPLATE;
-        setExtractorClientHeading(panel);
         panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
         document.body.appendChild(panel);
+        panel.__crcDisposeClientHeading = watchExtractorClientHeading(panel);
         panel.style.opacity = String(crcPanelOpacity / 100);
         const dragControls = installExtractorDragging(panel);
 
