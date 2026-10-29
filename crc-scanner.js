@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.1
+// @version      5.2
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -248,6 +248,9 @@ const CSS_STYLES = `
     color: #b8bdc4;
     font-weight: 750;
     letter-spacing: .04em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     pointer-events: none;
 }
 #crc-negative-panel.crc-minimized #crc-drag-handle { font-size: 15px; }
@@ -1883,7 +1886,7 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
         <!-- TOP BAR -->
         <div id="crc-top-bar">
             <button id="crc-settings-btn" type="button" title="Settings" aria-label="Settings" aria-haspopup="dialog" aria-expanded="false" aria-controls="crc-settings-menu">⚙</button>
-            <div id="crc-drag-handle" aria-hidden="true" title="Drag to move the extractor">DRAG TO MOVE</div>
+            <div id="crc-drag-handle" title="Drag to move the extractor">CLIENT REPORT</div>
             <div id="crc-window-controls">
                 <button id="crc-open-preview-btn" type="button" class="crc-window-btn" title="Open report preview in a new tab" aria-label="Open full-page report preview">↗</button>
                 <button id="crc-minimize-btn" class="crc-window-btn" title="Minimize">−</button>
@@ -4533,6 +4536,36 @@ function extractInquiries() {
             applySetting, refreshPreviewContent, setSettingsVisible };
     }
 
+    // Read the current client from Credit Repair Cloud's report title:
+    // <h1>Preview Credit Report <span>(Client Name)</span></h1>.
+    // Do not depend on generated MUI CSS classes or guess from a creditor name.
+    function getClientNameFromReportHeading(reportDocument = document) {
+        const headings = reportDocument.querySelectorAll('h1');
+        for (const heading of headings) {
+            const text = String(heading.textContent || '').replace(/\s+/g, ' ').trim();
+            if (!/^Preview Credit Report\b/i.test(text)) continue;
+            for (const span of heading.querySelectorAll('span')) {
+                const match = String(span.textContent || '').match(/^\s*\(\s*([^()]+?)\s*\)\s*$/);
+                if (!match) continue;
+                const name = match[1].replace(/\s+/g, ' ').trim();
+                if (name && name.length <= 120) return name;
+            }
+        }
+        return '';
+    }
+
+    function setExtractorClientHeading(panel, reportDocument = document) {
+        const handle = panel.querySelector('#crc-drag-handle');
+        if (!handle) return '';
+        const clientName = getClientNameFromReportHeading(reportDocument);
+        // Never display a name from an unrelated account or previous client.
+        handle.textContent = clientName || 'CLIENT REPORT';
+        handle.title = clientName
+            ? clientName + ' · Drag the top bar to move the extractor'
+            : 'Client name not found · Drag the top bar to move the extractor';
+        return clientName;
+    }
+
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
         const bankruptcyTables = extractBankruptcyTables();
@@ -4579,6 +4612,7 @@ function extractInquiries() {
         let panel = document.createElement("div");
         panel.id = "crc-negative-panel";
         panel.innerHTML = HTML_TEMPLATE;
+        setExtractorClientHeading(panel);
         panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
         document.body.appendChild(panel);
         panel.style.opacity = String(crcPanelOpacity / 100);
