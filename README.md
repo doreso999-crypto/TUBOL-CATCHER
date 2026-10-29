@@ -1,5 +1,25 @@
 # TUBOL-CATCHER
 
+## Client name detection fix (v5.3)
+
+If the extractor previously displayed **CLIENT REPORT** instead of the
+client's name, v5.3 retries the lookup as the Credit Repair Cloud page loads.
+It recognizes the **Preview Credit Report (Client Name)** heading whether
+its name is inside a `span` or directly in the heading, and searches
+accessible same-origin embedded frames and the report's parent page.
+A DOM observer updates the header when CRC injects or changes the heading
+after the scan. It is disconnected on the next scan to avoid duplicate work.
+
+The displayed name still comes only from a matching report heading; it
+is never guessed from accounts or persisted to storage. If CRC places
+the heading in a **cross-origin** frame, browser security prevents reading
+that frame, so **CLIENT REPORT** remains the fallback. In that case,
+inspect the live page's iframe location or share the surrounding markup
+so the integration can target the accessible element.
+
+Run `node test-client-name-delayed.js` for asynchronous load, iframe,
+parent page, rescan and cleanup coverage.
+
 ## Client name in draggable extractor header (v5.2)
 
 The extractor replaces the static **DRAG TO MOVE** label with the current
