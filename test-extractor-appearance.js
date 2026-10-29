@@ -166,7 +166,7 @@ assert(source.includes('min-height: 58px;'));
 assert(source.includes('id="crc-panel-opacity" min="60" max="100" step="1"'));
 assert(!source.includes('id="crc-panel-opacity" min="60" max="100" step="5"'));
 assert(source.includes('id="crc-drag-handle"'), 'Draggable header must remain available');
-assert(source.includes('setExtractorClientHeading(panel);'), 'Client name must populate when each report renders');
+assert(source.includes('panel.__crcDisposeClientHeading = watchExtractorClientHeading(panel);'), 'Client name must populate and keep updating during each report');
 assert(!source.includes('>DRAG TO MOVE</div>'), 'Old static header label must be removed');
 assert(!source.includes('crc-close-btn'),
     'The extractor must never expose a panel close button or close handler');

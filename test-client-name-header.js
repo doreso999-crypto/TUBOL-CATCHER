@@ -4,13 +4,15 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
 const script=fs.readFileSync(path.join(__dirname,'crc-scanner.js'),'utf8');
-const begin=script.indexOf('    // Read the current client from Credit Repair Cloud');
+const begin=script.indexOf('    // The report title may be injected asynchronously or rendered inside');
 const end=script.indexOf('    function showResults(negativeData) {',begin);
 assert(begin>=0 && end>begin);
 const implementation=script.slice(begin,end);
-const exported=new Function('document',implementation+
-  '\nreturn {getClientNameFromReportHeading,setExtractorClientHeading};');
-const api=exported({querySelectorAll(){return [];}});
+const exported=new Function('document','window',implementation+
+  '\nreturn {getClientNameFromReportHeading,setExtractorClientHeading,getCurrentClientName,watchExtractorClientHeading};');
+const fakeWindow={};
+fakeWindow.parent=fakeWindow;fakeWindow.top=fakeWindow;
+const api=exported({querySelectorAll(){return [];}},fakeWindow);
 const mk=(title,span)=>({
   textContent:title,
   querySelectorAll:()=>span===null?[]:[{textContent:span}]
@@ -26,14 +28,14 @@ assert.equal(api.getClientNameFromReportHeading(doc([mk('Preview Credit Report F
 assert.equal(api.getClientNameFromReportHeading(doc([mk('Wrong title (Zoe)','(Zoe)')])),'');
 const handle={textContent:'',title:''};
 const panel={querySelector:()=>handle};
-api.setExtractorClientHeading(panel,sample);
+api.setExtractorClientHeading(panel,sample,fakeWindow);
 assert.equal(handle.textContent,'Yong Chong');
-api.setExtractorClientHeading(panel,second);
+api.setExtractorClientHeading(panel,second,fakeWindow);
 assert.equal(handle.textContent,'Ana Marie');
-api.setExtractorClientHeading(panel,doc([]));
+api.setExtractorClientHeading(panel,doc([]),fakeWindow);
 assert.equal(handle.textContent,'CLIENT REPORT');
 assert(!implementation.includes('innerHTML'));
-assert(script.includes('setExtractorClientHeading(panel);'));
+assert(script.includes('panel.__crcDisposeClientHeading = watchExtractorClientHeading(panel);'));
 assert(script.includes('text-overflow: ellipsis;'));
 assert(script.includes('#crc-negative-panel.crc-minimized #crc-drag-handle'));
 console.log('PASS: CRC client title, safe DOM, no stale client, minimized header and long-name truncation');
