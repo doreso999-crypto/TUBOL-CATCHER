@@ -1,5 +1,23 @@
 # TUBOL-CATCHER
 
+## Client name in draggable extractor header (v5.2)
+
+The extractor replaces the static **DRAG TO MOVE** label with the current
+client name from Credit Repair Cloud's **Preview Credit Report** heading.
+For example, `Preview Credit Report <span>(Yong Chong)</span>` displays
+**Yong Chong** in the draggable header. This uses the report heading itself
+rather than a generated MUI CSS class.
+
+The client name is refreshed on every scan; it is not stored, and a new
+client never inherits the previous name. If no matching report heading is
+available, the extractor shows **CLIENT REPORT** instead of guessing.
+Long names are truncated visually with an ellipsis; hovering over the
+header displays the full client name and drag instructions. The extractor
+still drags from the same top bar when expanded or minimized.
+
+Run `node test-client-name-header.js` for matching, fallback,
+rescan, and safe-text regression checks.
+
 ## Inquiry date filter resets on every scan (v5.1)
 
 The regular **INQUIRIES → Filter by date** cutoff starts on **Show all**
@@ -169,8 +187,9 @@ categorized sorting, details, bankruptcy fields and copy output.
   the **Extractor opacity** slider from 60% (more see-through) to 100%
   (fully opaque), with **1% increments** (e.g. 73%, 74%, 75%). Changes
   apply immediately to expanded and minimized views and are saved in the browser.
-- **Move the entire floating panel:** Drag the top bar where it says
-  **DRAG TO MOVE** or any empty area of that bar. This works when the
+- **Move the entire floating panel:** Drag the top bar where it shows the
+  **current client's name** (or **CLIENT REPORT** if unavailable), or
+  any empty area of that bar. This works when the
   extractor is **expanded or minimized**. Buttons, selections, scrolling,
   and right-click menus keep their normal behavior.
 - **Position memory:** The window remembers its position across rescans
