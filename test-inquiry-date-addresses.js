@@ -89,7 +89,7 @@ const mockDom = {
 const renderFn = section('    function renderPreviousAddresses(container, addresses, kind =',
     '    function renderPersonalInfo(');
 for (const mode of ['legacy', 'modern']) {
-    const render = new Function('document', 'crcDisplayMode', renderFn +
+    const render = new Function('document', 'crcPersonalDisplayMode', renderFn +
         '\nreturn renderPreviousAddresses;')(mockDom, mode);
     const container = { children: [], appendChild(item) { this.children.push(item); } };
     const copy = render(container, addresses);
