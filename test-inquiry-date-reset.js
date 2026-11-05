@@ -20,7 +20,7 @@ const localStorage={
     removeItem:k=>storageMap.delete(k)
 };
 const dateState=between("    let crcInquiryBeforeDate = '';",
-    '    function loadCrcDisplayMode()');
+    '    function normalizeCrcDisplayMode(mode)');
 assert(dateState.includes('function resetInquiryDateForNewScan()'),
     'Must provide one named reset operation');
 const state=new Function('localStorage','CRC_INQUIRY_BEFORE_DATE_KEY',
