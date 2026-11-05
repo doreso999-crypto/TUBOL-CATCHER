@@ -1,5 +1,23 @@
 # TUBOL-CATCHER
 
+## Independent list display formats (v5.4)
+
+Under **Scanner Settings → General → List Display Format**, choose formats
+separately for **Taking inquiries (INQUIRIES)**, **New hard inquiries (NEW)**,
+and **Personal info**. Every section supports **Modern** (uppercase creditor
+or information plus bureau label) or **Legacy** (original grouped lists).
+The selected format updates both the displayed entries and their clipboard
+output. Changing INQUIRIES does not alter NEW or Personal info.
+
+The full-page report preview has matching independent controls in its
+**Settings** drawer. These settings are saved locally per browser, and the
+previous shared format becomes each section's initial value when upgrading.
+The extractor, settings controls, preview and launch button use sans-serif
+fonts exclusively. No report/account details are stored as preferences.
+
+Run `node test-list-display-settings.js` and `node test-full-page-preview.js`
+to verify the separated formats, migration, copy behavior and preview sync.
+
 ## Client name detection fix (v5.3)
 
 If the extractor previously displayed **CLIENT REPORT** instead of the
