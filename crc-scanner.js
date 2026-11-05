@@ -16,6 +16,9 @@
 
     // Save preferences and only creditor names users explicitly add to the alias dictionary; never save report details.
     const CRC_DISPLAY_KEY = 'tubol-crc-list-display-mode';
+    const CRC_INQUIRIES_DISPLAY_KEY = 'tubol-crc-inquiries-display-mode';
+    const CRC_NEW_INQUIRIES_DISPLAY_KEY = 'tubol-crc-new-inquiries-display-mode';
+    const CRC_PERSONAL_DISPLAY_KEY = 'tubol-crc-personal-info-display-mode';
     const CRC_COPY_CONNECTED_INQUIRIES_KEY = 'tubol-crc-copy-connected-inquiries';
     const CRC_COPY_CONNECTED_NEW_KEY = 'tubol-crc-copy-connected-new-inquiries';
     const CRC_OPEN_NAMES_ONLY_KEY = 'tubol-crc-open-account-names-only';
@@ -78,15 +81,24 @@
         catch (_) { /* In-memory filter still resets. */ }
     }
     resetInquiryDateForNewScan();
-    function loadCrcDisplayMode() {
-        try { return localStorage.getItem(CRC_DISPLAY_KEY) === 'legacy' ? 'legacy' : 'modern'; }
-        catch (_) { return 'modern'; }
+    function normalizeCrcDisplayMode(mode) {
+        return mode === 'legacy' ? 'legacy' : 'modern';
     }
-    let crcDisplayMode = loadCrcDisplayMode();
-    function saveCrcDisplayMode(mode) {
-        crcDisplayMode = mode === 'legacy' ? 'legacy' : 'modern';
-        try { localStorage.setItem(CRC_DISPLAY_KEY, crcDisplayMode); }
-        catch (_) { /* Remain in the selected mode for this session. */ }
+    function loadCrcDisplayMode(key) {
+        try {
+            const stored = localStorage.getItem(key);
+            // An existing shared preference is the starting value for each independent setting.
+            return normalizeCrcDisplayMode(stored === null ? localStorage.getItem(CRC_DISPLAY_KEY) : stored);
+        } catch (_) { return 'modern'; }
+    }
+    let crcInquiryDisplayMode = loadCrcDisplayMode(CRC_INQUIRIES_DISPLAY_KEY);
+    let crcNewInquiryDisplayMode = loadCrcDisplayMode(CRC_NEW_INQUIRIES_DISPLAY_KEY);
+    let crcPersonalDisplayMode = loadCrcDisplayMode(CRC_PERSONAL_DISPLAY_KEY);
+    function saveCrcDisplayMode(key, mode) {
+        const normalized = normalizeCrcDisplayMode(mode);
+        try { localStorage.setItem(key, normalized); }
+        catch (_) { /* Keep the current session preference. */ }
+        return normalized;
     }
     // ========================================
     // JSON DATA
@@ -166,6 +178,15 @@ const CSS_STYLES = `
    TOP APP BAR
    ========================================================= */
 
+/* All controls use sans-serif, regardless of host-page browser defaults. */
+#crc-negative-panel button, #crc-negative-panel input,
+#crc-negative-panel select, #crc-negative-panel textarea,
+.crc-preview-settings, .crc-preview-settings button,
+.crc-preview-settings input, .crc-preview-settings select,
+.crc-preview-settings textarea, #crc-scan-btn {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
 #crc-top-bar {
     width: 100%;
     min-height: 58px;
@@ -221,7 +242,7 @@ const CSS_STYLES = `
 
 
 /* Modern entries may be long: show the full address or creditor/date/code line. */
-#crc-negative-panel.crc-modern-display .crc-inquiry-creditor {
+#crc-negative-panel .crc-modern-display .crc-inquiry-creditor {
     white-space: normal;
     overflow: visible;
     text-overflow: clip;
@@ -1905,12 +1926,23 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
                 </div>
                 <div id="crc-settings-content">
                 <div id="crc-settings-general" role="tabpanel">
-                <label for="crc-display-mode">List Display Format</label>
-                <select id="crc-display-mode">
+                <div class="crc-settings-section-title">List Display Format</div>
+                <label for="crc-inquiries-display-mode">Taking inquiries (INQUIRIES)</label>
+                <select id="crc-inquiries-display-mode">
                     <option value="modern">Modern — Uppercase + (EXP/EQU/TU)</option>
-                    <option value="legacy">Legacy Display — Original grouped lists</option>
+                    <option value="legacy">Legacy — Original grouped lists</option>
                 </select>
-                <div class="crc-settings-note">List format applies to Inquiries, New Inquiries and Personal Info.</div>
+                <label for="crc-new-inquiries-display-mode">New hard inquiries (NEW)</label>
+                <select id="crc-new-inquiries-display-mode">
+                    <option value="modern">Modern — Uppercase + (EXP/EQU/TU)</option>
+                    <option value="legacy">Legacy — Original grouped lists</option>
+                </select>
+                <label for="crc-personal-display-mode">Personal info</label>
+                <select id="crc-personal-display-mode">
+                    <option value="modern">Modern — Uppercase + (EXP/EQU/TU)</option>
+                    <option value="legacy">Legacy — Original grouped lists</option>
+                </select>
+                <div class="crc-settings-note">Each section has its own saved display and copy format. Existing choices carry over.</div>
                 <div class="crc-settings-section-title">Negative account data priority</div>
                 <label for="crc-bureau-priority">Preferred credit bureau</label>
                 <select id="crc-bureau-priority">
@@ -3430,8 +3462,9 @@ function extractInquiries() {
     // items by default; NEW includes connected recent inquiries.
     // ========================================
 
-    function renderInquiryBureauGroups(container, groups, emptyLabel, includeConnectedInCopy = false, onContext = null) {
+    function renderInquiryBureauGroups(container, groups, emptyLabel, includeConnectedInCopy = false, onContext = null, displayMode = 'modern') {
         let copyText = '';
+        container.classList.toggle('crc-modern-display', displayMode === 'modern');
 
         groups.forEach(group => {
             const code = group.title === 'Experian' ? 'EXP'
@@ -3478,7 +3511,7 @@ function extractInquiries() {
                     creditor.className = 'crc-inquiry-creditor';
                     const name = String(item.creditor || '(No creditor)').trim();
                     const dateValue = String(item.date || '').trim();
-                    creditor.textContent = crcDisplayMode === 'modern'
+                    creditor.textContent = displayMode === 'modern'
                         ? '- ' + name.toUpperCase() + (dateValue ? ' ' + dateValue : '') + '(' + code + ')'
                         : name;
 
@@ -3489,7 +3522,7 @@ function extractInquiries() {
                     topRow.appendChild(status);
                     inquiry.appendChild(topRow);
 
-                    if (crcDisplayMode === 'legacy') {
+                    if (displayMode === 'legacy') {
                         const date = document.createElement('div');
                         date.className = 'crc-inquiry-date';
                         date.textContent = item.date || '';
@@ -3503,7 +3536,7 @@ function extractInquiries() {
             container.appendChild(section);
 
             const copyItems = includeConnectedInCopy ? group.items : unconnectedInGroup;
-            if (crcDisplayMode === 'legacy') {
+            if (displayMode === 'legacy') {
                 copyText += group.title.toUpperCase() + ':\n\n';
                 if (!copyItems.length) {
                     copyText += includeConnectedInCopy ? '(No inquiries)\n\n' : '(No unconnected inquiries)\n\n';
@@ -3575,7 +3608,7 @@ function extractInquiries() {
                     const card = document.createElement('div');
                     card.className = 'crc-previous-address-card';
                     const date = String(item.date || '').trim();
-                    card.textContent = crcDisplayMode === 'modern'
+                    card.textContent = crcPersonalDisplayMode === 'modern'
                         ? '- ' + String(item.address || '').trim().toUpperCase() +
                             (date ? ' ' + date : '') + '(' + suffix + ')'
                         : item.address + (date ? ' ' + date : '');
@@ -3586,7 +3619,7 @@ function extractInquiries() {
             section.appendChild(list);
             container.appendChild(section);
 
-            if (crcDisplayMode === 'legacy') {
+            if (crcPersonalDisplayMode === 'legacy') {
                 copyText += bureau.title.toUpperCase() + ':\n';
                 copyText += items.length
                     ? items.map(item => '- ' + item.address + (item.date ? ' ' + item.date : '')).join('\n') + '\n\n'
@@ -3818,7 +3851,9 @@ function extractInquiries() {
         // Only preferences (never report values) are written to localStorage.
         const previewSettings = Object.assign({
             bureauPriority: 'equifax',
-            displayMode: 'modern',
+            inquiriesDisplayMode: 'modern',
+            newDisplayMode: 'modern',
+            personalDisplayMode: 'modern',
             copyConnected: false,
             copyConnectedNew: true,
             openNamesOnly: false,
@@ -3907,10 +3942,14 @@ function extractInquiries() {
             ['equifax','Equifax first'],['experian','Experian first'],
             ['transunion','TransUnion first']
         ],'Disputed Mode always shows all bureaus, regardless of priority.');
-        addSelect('displayMode','Display format',[
+        const displayChoices = [
             ['modern','Modern — uppercase and bureau labels'],
             ['legacy','Legacy — grouped original names']
-        ]);
+        ];
+        addSelect('inquiriesDisplayMode','Taking inquiries (INQUIRIES)',displayChoices);
+        addSelect('newDisplayMode','New hard inquiries (NEW)',displayChoices);
+        addSelect('personalDisplayMode','Personal info',displayChoices,
+            'Each display and copy format is independent.');
         const opacityLabel=put(settingsBody,make('label','', 'Report opacity'));
         const opacityInput=put(settingsBody,make('input'));
         opacityInput.type='range';opacityInput.min='60';opacityInput.max='100';
@@ -4219,7 +4258,9 @@ function extractInquiries() {
             const items=previewInquiryItems(mode);
             if (!items) return;
             container.replaceChildren();
-            const modern=previewSettings.displayMode==='modern';
+            const modern=(mode === 'new' ? previewSettings.newDisplayMode :
+                previewSettings.inquiriesDisplayMode) === 'modern';
+            container.classList.toggle('crc-modern-display', modern);
             for(const bureau of [{name:'Experian',key:'experian',code:'EXP'},
                                   {name:'Equifax',key:'equifax',code:'EQU'},
                                   {name:'TransUnion',key:'transunion',code:'TU'}]) {
@@ -4287,7 +4328,7 @@ function extractInquiries() {
                 for (const item of items) {
                     const name=String(item.address||'').trim();
                     const date=String(item.date||'').trim();
-                    const text=previewSettings.displayMode==='modern'
+                    const text=previewSettings.personalDisplayMode==='modern'
                         ? '- '+name.toUpperCase()+(date?' '+date:'')+'('+bureau.code+')'
                         : name+(date?' '+date:'');
                     put(list,make('div','crc-previous-address-card',text));
@@ -4307,10 +4348,11 @@ function extractInquiries() {
                 : 'Showing all extracted inquiries.';
             if (displayLayout==='table') renderPreviewTable();
         }
-        function previewInquiryCopy(items,includeConnected) {
+        function previewInquiryCopy(items,includeConnected,mode) {
             if (!items) return '';
             let result='';
-            const modern=previewSettings.displayMode==='modern';
+            const modern=(mode === 'new' ? previewSettings.newDisplayMode :
+                previewSettings.inquiriesDisplayMode) === 'modern';
             for (const bureau of [{name:'Experian',key:'experian',code:'EXP'},
                 {name:'Equifax',key:'equifax',code:'EQU'},
                 {name:'TransUnion',key:'transunion',code:'TU'}]) {
@@ -4330,7 +4372,7 @@ function extractInquiries() {
         }
         function previewPersonalCopy() {
             if (!snapshot.previousAddresses || !snapshot.employers) return snapshot.copyPersonalInfo;
-            const modern=previewSettings.displayMode==='modern';
+            const modern=previewSettings.personalDisplayMode==='modern';
             function format(groups) {
                 let lines=[];
                 for(const bureau of [{name:'Experian',key:'EX',code:'EXP'},
@@ -4496,7 +4538,8 @@ function extractInquiries() {
                 if (!Array.isArray(snapshot.inquiries)) return inquiryMode === 'new'
                     ? snapshot.copyNewInquiries : snapshot.copyInquiries;
                 return previewInquiryCopy(previewInquiryItems(inquiryMode),
-                    inquiryMode === 'new' ? previewSettings.copyConnectedNew : previewSettings.copyConnected);
+                    inquiryMode === 'new' ? previewSettings.copyConnectedNew : previewSettings.copyConnected,
+                    inquiryMode);
             }
             return negativeMode === 'standard'
                 ? previewNegativeCopy()
@@ -4709,7 +4752,6 @@ function extractInquiries() {
         let panel = document.createElement("div");
         panel.id = "crc-negative-panel";
         panel.innerHTML = HTML_TEMPLATE;
-        panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
         document.body.appendChild(panel);
         panel.__crcDisposeClientHeading = watchExtractorClientHeading(panel);
         panel.style.opacity = String(crcPanelOpacity / 100);
@@ -5048,7 +5090,7 @@ function extractInquiries() {
         }
         updateDateFilterSummary();
 
-        let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries", crcCopyConnectedInquiries, openInquiryAliasDialog);
+        let copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, "No inquiries", crcCopyConnectedInquiries, openInquiryAliasDialog, crcInquiryDisplayMode);
 
         function refreshRegularInquiryDateFilter() {
             regularInquiries = filterInquiriesBeforeDate(inquiries, crcInquiryBeforeDate);
@@ -5058,7 +5100,7 @@ function extractInquiries() {
                 { title: "TransUnion", items: regularInquiries.filter(i => i.transunion) }
             ];
             inquiriesView.replaceChildren();
-            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog, crcInquiryDisplayMode);
             updateDateFilterSummary();
         }
         dateFilterToggle.addEventListener('click', () => {
@@ -5114,7 +5156,7 @@ function extractInquiries() {
             { title: "TransUnion", items: newInquiries.filter(i => i.transunion) }
         ];
 
-        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", crcCopyConnectedNew, openInquiryAliasDialog);
+        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", crcCopyConnectedNew, openInquiryAliasDialog, crcNewInquiryDisplayMode);
 
         btnNewInquiries.textContent = `NEW (${newInquiries.length})`;
 
@@ -5183,9 +5225,9 @@ function extractInquiries() {
                 item.connectedToOpen = isInquiryConnectedToOpenAccount(item.creditor, item.bureauKey, openAccountsByBureau);
             });
             inquiriesView.replaceChildren();
-            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog, crcInquiryDisplayMode);
             newInquiriesView.replaceChildren();
-            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog);
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog, crcNewInquiryDisplayMode);
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
         }
@@ -5368,7 +5410,9 @@ function extractInquiries() {
         // Gear menu: update both display and clipboard results without a rescan.
         const settingsButton = panel.querySelector('#crc-settings-btn');
         const settingsMenu = panel.querySelector('#crc-settings-menu');
-        const formatSelect = panel.querySelector('#crc-display-mode');
+        const inquiriesFormatSelect = panel.querySelector('#crc-inquiries-display-mode');
+        const newFormatSelect = panel.querySelector('#crc-new-inquiries-display-mode');
+        const personalFormatSelect = panel.querySelector('#crc-personal-display-mode');
         const copyConnectedInput = panel.querySelector('#crc-copy-connected-inquiries');
         const copyConnectedNewInput = panel.querySelector('#crc-copy-connected-new');
         const openNamesOnlyInput = panel.querySelector('#crc-open-names-only');
@@ -5388,7 +5432,9 @@ function extractInquiries() {
         panelOpacityInput.addEventListener('input', () => {
             panelOpacityValue.textContent = applyPanelOpacity(panel, panelOpacityInput.value) + '%';
         });
-        formatSelect.value = crcDisplayMode;
+        inquiriesFormatSelect.value = crcInquiryDisplayMode;
+        newFormatSelect.value = crcNewInquiryDisplayMode;
+        personalFormatSelect.value = crcPersonalDisplayMode;
         copyConnectedInput.checked = crcCopyConnectedInquiries;
         copyConnectedNewInput.checked = crcCopyConnectedNew;
         openNamesOnlyInput.checked = crcOpenNamesOnly;
@@ -5421,25 +5467,27 @@ function extractInquiries() {
         settingsAliasesTab.addEventListener('click', () => selectSettingsTab('aliases'));
         panel.querySelector('#crc-settings-close').addEventListener('click', () => setSettingsOpen(false));
         settingsBackdrop.addEventListener('click', () => setSettingsOpen(false));
-        formatSelect.addEventListener('change', () => {
-            saveCrcDisplayMode(formatSelect.value);
-            panel.classList.toggle('crc-modern-display', crcDisplayMode === 'modern');
-
+        inquiriesFormatSelect.addEventListener('change', () => {
+            crcInquiryDisplayMode = saveCrcDisplayMode(CRC_INQUIRIES_DISPLAY_KEY, inquiriesFormatSelect.value);
+            inquiriesView.replaceChildren();
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog, crcInquiryDisplayMode);
+        });
+        newFormatSelect.addEventListener('change', () => {
+            crcNewInquiryDisplayMode = saveCrcDisplayMode(CRC_NEW_INQUIRIES_DISPLAY_KEY, newFormatSelect.value);
+            newInquiriesView.replaceChildren();
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog, crcNewInquiryDisplayMode);
+        });
+        personalFormatSelect.addEventListener('change', () => {
+            crcPersonalDisplayMode = saveCrcDisplayMode(CRC_PERSONAL_DISPLAY_KEY, personalFormatSelect.value);
             addressesDiv.replaceChildren();
             employersDiv.replaceChildren();
             copyTextPersonalInfo = renderPersonalInfo(addressesDiv, employersDiv, previousAddresses, employers);
-
-            inquiriesView.replaceChildren();
-            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
-
-            newInquiriesView.replaceChildren();
-            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog);
         });
         copyConnectedInput.addEventListener('change', () => {
             crcCopyConnectedInquiries = copyConnectedInput.checked;
             saveCrcBoolSetting(CRC_COPY_CONNECTED_INQUIRIES_KEY, crcCopyConnectedInquiries);
             inquiriesView.replaceChildren();
-            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog);
+            copyTextOpenInquiries = renderInquiryBureauGroups(inquiriesView, bureauGroups, 'No inquiries', crcCopyConnectedInquiries, openInquiryAliasDialog, crcInquiryDisplayMode);
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
         });
@@ -5447,7 +5495,7 @@ function extractInquiries() {
             crcCopyConnectedNew = copyConnectedNewInput.checked;
             saveCrcBoolSetting(CRC_COPY_CONNECTED_NEW_KEY, crcCopyConnectedNew);
             newInquiriesView.replaceChildren();
-            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog);
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, 'No recent inquiries', crcCopyConnectedNew, openInquiryAliasDialog, crcNewInquiryDisplayMode);
             updateInquiryCopyNote();
             panel.querySelector('#crc-copy-page-2').textContent = inquiryCopyButtonLabel();
         });
@@ -5614,7 +5662,9 @@ function extractInquiries() {
                     employers,
                     settings: {
                         bureauPriority: crcBureauPriority,
-                        displayMode: crcDisplayMode,
+                        inquiriesDisplayMode: crcInquiryDisplayMode,
+                        newDisplayMode: crcNewInquiryDisplayMode,
+                        personalDisplayMode: crcPersonalDisplayMode,
                         copyConnected: crcCopyConnectedInquiries,
                         copyConnectedNew: crcCopyConnectedNew,
                         openNamesOnly: crcOpenNamesOnly,
@@ -5624,7 +5674,9 @@ function extractInquiries() {
                     onSettingChange(key,value) {
                         const controls = {
                             bureauPriority: ['#crc-bureau-priority','change'],
-                            displayMode: ['#crc-display-mode','change'],
+                            inquiriesDisplayMode: ['#crc-inquiries-display-mode','change'],
+                            newDisplayMode: ['#crc-new-inquiries-display-mode','change'],
+                            personalDisplayMode: ['#crc-personal-display-mode','change'],
                             copyConnected: ['#crc-copy-connected-inquiries','change'],
                             copyConnectedNew: ['#crc-copy-connected-new','change'],
                             openNamesOnly: ['#crc-open-names-only','change'],
