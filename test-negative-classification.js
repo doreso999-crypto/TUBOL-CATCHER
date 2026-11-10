@@ -83,6 +83,44 @@ const joinedIntoOneCell = makeGrid('Account TypeCollectionAccount StatusClosed',
     ['Account TypeCollectionAccount StatusClosed']);
 assert.equal(classifyNegativeAccountType('CAPITAL ONE', getNegativeAccountTableText(joinedIntoOneCell)),
     'CHARGE OFF', 'Collection embedded in a single CRC cell must override Closed');
+// Reproduce the structure of a CRC table with COLLECTON in the account
+// rating and payment status, CLOSED in account status, and the complete
+// charged-off remark stored in a truncated tooltip.
+const fieldsFromCapitalOneSample = [
+    ['Account Rating:', 'COLLECTION'],
+    ['Account Status:', 'CLOSED'],
+    ['Payment Status:', 'COLLECTION'],
+    ['Account Type:', 'REVOLVING'],
+    ['Creditor Remarks:', 'ACCOUNT CLOSED, LAST REPORTED DELINQUENCIES: ...'],
+];
+const sampleCells = fieldsFromCapitalOneSample.map(([label, value]) => ({
+    textContent: label + value,
+    querySelectorAll(selector) {
+        return selector === '[title]' && label === 'Creditor Remarks:'
+            ? [{ getAttribute: key => key === 'title' ? 'ACCOUNT CLOSED, CHARGED OFF ACCOUNT' : null }]
+            : [];
+    }
+}));
+const sampleGrid = {
+    textContent: fieldsFromCapitalOneSample.map(pair => pair.join('')).join(''),
+    querySelectorAll() { return sampleCells; }
+};
+const sampleText = getNegativeAccountTableText(sampleGrid);
+assert(sampleText.includes('COLLECTION'));
+assert(sampleText.includes('CHARGED OFF ACCOUNT'), 'Full creditor-remark tooltip must be included');
+assert.equal(classifyNegativeAccountType('CAPITAL ONE', sampleText), 'CHARGE OFF');
+assert.equal(classifyNegativeAccountType('MIDLAND CREDIT', sampleText), 'COLLECTION');
+const titleOnlyGrid = {
+    textContent: 'Account StatusClosed',
+    querySelectorAll() {
+        return [{
+            textContent: 'Account StatusClosed',
+            querySelectorAll() { return [{getAttribute: key => key === 'title' ? 'CHARGED OFF ACCOUNT' : null}]; }
+        }];
+    }
+};
+assert.equal(classifyNegativeAccountType('CAPITAL ONE', getNegativeAccountTableText(titleOnlyGrid)),
+    'CHARGE OFF', 'Truncated tooltip must supply charge-off evidence');
 const collectionInsideHeader = makeGrid('CollectionAccount StatusClosed',
     ['Collection', 'Account Status', 'Closed']);
 assert.equal(classifyNegativeAccountType('Original Bank', getNegativeAccountTableText(collectionInsideHeader)),
@@ -91,4 +129,8 @@ assert(script.includes('return classifyNegativeAccountType(accountName, getNegat
     'The Negative tab must use per-cell text collection before classification');
 assert(script.includes("add(grid.textContent);"),
     'The classifier must include grid text outside the standard bureau cells');
+assert(script.includes("cell.querySelectorAll('[title]')"),
+    'The extractor must read untruncated CRC tooltip values');
+assert(script.includes("window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;"),
+    'A runtime version flag is needed to diagnose duplicate or cached loaders');
 console.log('PASS: ' + examples.length + ' Negative-tab cases, agency boundary checks, and classifier integration');
