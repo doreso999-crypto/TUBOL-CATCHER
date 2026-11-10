@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.4
+// @version      5.5
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -2655,6 +2655,24 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
 
     // One source of truth for Negative-tab account type. The word "closed"
     // describes an account's status and must never override collection evidence.
+    // Join individual table cells with spaces. Plain textContent can merge
+    // neighboring cells into "CollectionClosed" and hide collection evidence.
+    // Stay inside this account's grid so other accounts cannot affect its type.
+    function getNegativeAccountTableText(grid) {
+        const parts = [];
+        const add = value => {
+            const text = String(value || '').replace(/\s+/g, ' ').trim();
+            if (text) parts.push(text);
+        };
+        grid.querySelectorAll('[data-field], [role="cell"], [role="columnheader"]').forEach(cell => {
+            add(cell.innerText || cell.textContent);
+        });
+        // Include any extra labels that CRC renders outside the usual cells.
+        add(grid.innerText);
+        add(grid.textContent);
+        return parts.join(' ');
+    }
+
     function hasCollectionEvidence(accountTableText) {
         const text = String(accountTableText || '').toLowerCase();
         return /\bcollections?\b/.test(text) ||
@@ -2903,16 +2921,8 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
             }
 
             function getAccountType() {
-                // Include the complete account grid, not only bureau-value cells:
-                // collection indicators can appear in an account-type row or label.
-                let accountTableText = grid.textContent || '';
-                Object.values(rows).forEach(row => {
-                    bureaus.forEach(bureau => {
-                        const cell = row.querySelector(`[data-field="${bureau.toLowerCase()}"]`);
-                        if (cell) accountTableText += ' ' + (cell.textContent || '');
-                    });
-                });
-                return classifyNegativeAccountType(accountName, accountTableText);
+                // Include all visible account-grid cells, keeping their word boundaries.
+                return classifyNegativeAccountType(accountName, getNegativeAccountTableText(grid));
             }
 
             let balance = getBalanceValue();
