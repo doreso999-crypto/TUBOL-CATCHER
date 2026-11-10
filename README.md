@@ -1,5 +1,20 @@
 # TUBOL-CATCHER
 
+## Negative account classification: cell-boundary fix (v5.5)
+
+The **Negative** tab now reads each cell in an account's CRC table as a separate
+text segment instead of relying only on the grid's raw `textContent`.
+CRC can concatenate adjacent values into strings like `CollectionClosed`,
+which caused a creditor outside the known collection-agency registry to be
+incorrectly marked **CLOSED LP**.
+
+Collection evidence in the account's own table takes priority over **Closed**:
+known collection agencies become **COLLECTION**; other creditors become
+**CHARGE OFF**. Truly closed accounts without collection or charge-off
+evidence remain **CLOSED LP**. Classification stays scoped to each account
+table so one account cannot affect another. Run
+`node test-negative-classification.js` for the additional regression cases.
+
 ## Independent list display formats (v5.4)
 
 Under **Scanner Settings → General → List Display Format**, choose formats
