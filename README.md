@@ -1,5 +1,24 @@
 # TUBOL-CATCHER
 
+## Credit-report classification verification (v5.8)
+
+The Negative account classifier now reads **full title/tooltip values** as
+well as displayed table cells. Some CRC remarks are visually shortened and
+hold `CHARGED OFF ACCOUNT` only in the title attribute. After expanding
+details, the scan allows CRC's React grid a short moment to finish rendering
+before extracting data.
+
+An anonymized regression test models Capital One with **Account Rating =
+COLLECTION**, **Payment Status = COLLECTION**, **Account Status = CLOSED**
+and a truncated remark whose tooltip contains **CHARGED OFF ACCOUNT**.
+Expected output is **CHARGE OFF**, not **CLOSED LP**. The same sample with
+a registry-listed collection agency remains **COLLECTION**.
+
+If the report still says CLOSED LP, check the actual running script:
+the lower-left badge shows `tubol-catcher(v5.8)`; the console exposes
+`window.__tubolCatcherVersion`. An earlier userscript or a stale GitHub
+loader may prevent this version from executing on that page.
+
 ## Lower-left status indicator (v5.7)
 
 On Credit Repair Cloud client pages, TUBOL-CATCHER displays a small
