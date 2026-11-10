@@ -1,5 +1,22 @@
 # TUBOL-CATCHER
 
+## Collection keyword detection fix (v5.6)
+
+CRC sometimes concatenates values inside an individual rendered cell or raw
+table text, producing `Account TypeCollectionAccount StatusClosed`. A
+word-boundary-only regular expression missed `Collection` in that format,
+causing some non-agency creditors (e.g., Capital One) to be labeled
+`CLOSED LP`.
+
+The Negative classifier now checks for `collection` in the current account
+grid even when the word touches another label. A creditor outside the
+collection-agency registry is classified `CHARGE OFF` when that evidence
+exists, regardless of a `Closed` status. The account grid remains scoped
+to prevent cross-account classification. Known collection agencies remain
+`COLLECTION` and ordinary closed accounts remain `CLOSED LP`.
+Regression cases include separately rendered cells and glued single-cell
+or table strings.
+
 ## Negative account classification: cell-boundary fix (v5.5)
 
 The **Negative** tab now reads each cell in an account's CRC table as a separate
