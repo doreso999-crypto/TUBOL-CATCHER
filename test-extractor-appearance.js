@@ -176,6 +176,12 @@ assert(source.includes('id="crc-settings-close"'),
     'The Settings dialog must still be independently dismissible');
 assert(source.includes('scanButton.id = "crc-scan-btn"'),
     'The scan button should remain available');
+const panelReset = source.indexOf('try { localStorage.removeItem(CRC_PANEL_POSITION_KEY); }');
+const panelDrag = source.indexOf('const dragControls = installExtractorDragging(panel);');
+assert(panelReset !== -1 && panelDrag > panelReset,
+    'Every new scan must clear the old panel position before dragging initializes');
+assert(source.includes('top: 20px;') && source.includes('right: 20px;'),
+    'The extractor must have an upper-right default position');
 assert(source.includes('#crc-settings-menu .crc-settings-note { font-size: 15px;'));
 assert(source.includes('#crc-settings-menu .crc-settings-heading { font-size: 26px;'));
 assert(source.includes('#crc-negative-panel.crc-minimized .crc-stat-row-wrapper'));
