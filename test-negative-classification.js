@@ -17,9 +17,10 @@ const collectionList = between('    const COLLECTION_AGENCIES = [', '    // ====
 const agencyLogic = between('    function isKnownCollectionAgency(name) {', '    // ========================================\n    // NAME NORMALIZATION');
 const normalizer = between('    function normalizeAccountName(name) {', '    function namesMatch(a, b) {');
 const classifierLogic = between('    // One source of truth for Negative-tab account type.', '    function extractData() {');
-const { classifyNegativeAccountType, isKnownCollectionAgency, hasCollectionEvidence } =
+const { classifyNegativeAccountType, isKnownCollectionAgency, hasCollectionEvidence,
+    getNegativeAccountTableText } =
     new Function(collectionList + normalizer + agencyLogic + classifierLogic +
-        '\nreturn { classifyNegativeAccountType, isKnownCollectionAgency, hasCollectionEvidence };')();
+        '\nreturn { classifyNegativeAccountType, isKnownCollectionAgency, hasCollectionEvidence, getNegativeAccountTableText };')();
 
 const examples = [
     ['Original Bank', 'Account Type: Collection Account Status: Closed', 'CHARGE OFF'],
@@ -52,8 +53,25 @@ for (const [creditor, report, expected] of examples) {
 assert.equal(isKnownCollectionAgency('M'), false, 'Do not match short fragments');
 assert.equal(hasCollectionEvidence('Collection; Closed'), true);
 assert.equal(hasCollectionEvidence('Account Status: Closed'), false);
-assert(script.includes('return classifyNegativeAccountType(accountName, accountTableText);'),
-    'The Negative tab must call the tested classifier');
-assert(script.includes("let accountTableText = grid.textContent || '';"),
-    'The classifier must include account-grid text, not only bureau value cells');
+const makeGrid = (textContent, cells) => ({
+    textContent,
+    querySelectorAll() { return cells.map(text => ({ textContent: text })); }
+});
+const joinedCollection = makeGrid('Account TypeCollectionAccount StatusClosed',
+    ['Account Type', 'Collection', 'Account Status', 'Closed']);
+assert.equal(classifyNegativeAccountType('Original Bank', getNegativeAccountTableText(joinedCollection)),
+    'CHARGE OFF', 'Adjacent DOM cells must not hide collection evidence');
+assert.equal(classifyNegativeAccountType('MIDLAND CREDIT', getNegativeAccountTableText(joinedCollection)),
+    'COLLECTION', 'Known agency remains a collection when cells concatenate');
+const onlyClosed = makeGrid('Account StatusClosed', ['Account Status', 'Closed']);
+assert.equal(classifyNegativeAccountType('Original Bank', getNegativeAccountTableText(onlyClosed)),
+    'CLOSED LP', 'Closed without collection evidence remains a closed account');
+const collectionInsideHeader = makeGrid('CollectionAccount StatusClosed',
+    ['Collection', 'Account Status', 'Closed']);
+assert.equal(classifyNegativeAccountType('Original Bank', getNegativeAccountTableText(collectionInsideHeader)),
+    'CHARGE OFF', 'Collection in table header must be detected');
+assert(script.includes('return classifyNegativeAccountType(accountName, getNegativeAccountTableText(grid));'),
+    'The Negative tab must use per-cell text collection before classification');
+assert(script.includes("add(grid.textContent);"),
+    'The classifier must include grid text outside the standard bureau cells');
 console.log('PASS: ' + examples.length + ' Negative-tab cases, agency boundary checks, and classifier integration');
