@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.8
+// @version      5.9
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.8';
+    const TUBOL_CATCHER_VERSION = '5.9';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -2744,6 +2744,14 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
         return '';
     }
 
+    function getCollectionVerificationWarning(creditorName, accountType) {
+        // A registry-recognized agency needs no red "verify" notice.
+        // Only an otherwise-unverified COLLECTION label can show it.
+        return accountType === 'COLLECTION' && !isKnownCollectionAgency(creditorName)
+            ? '⚠ VERIFY COLLECTION ACCT'
+            : '';
+    }
+
     // Capture all populated row values for every negatively reporting bureau,
     // regardless of the preferred bureau used by the ordinary Negative view.
     function collectNegativeBureauFields(rows, reportingBureaus) {
@@ -2982,11 +2990,9 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
                 if (bureauSet.includes("transunion")) bureauDisplay += "TU - ";
             }
 
-            // Keep the red verification notice on COLLECTION records only.
-            // CHARGE OFF entries must not display a collection warning.
-            const collectionWarning = accountType === 'COLLECTION'
-                ? '⚠ VERIFY COLLECTION ACCT'
-                : '';
+            // Suppress the red notice for confirmed collection agencies.
+            // Preserve it only if an unrecognized name is ever labeled COLLECTION.
+            const collectionWarning = getCollectionVerificationWarning(accountName, accountType);
 
             output.push({
                 account: accountName,
@@ -4806,6 +4812,11 @@ function extractInquiries() {
         document.body.appendChild(panel);
         panel.__crcDisposeClientHeading = watchExtractorClientHeading(panel);
         panel.style.opacity = String(crcPanelOpacity / 100);
+        // Always open a newly scanned client's extractor at the upper right.
+        // Clear an old dragged position before the drag controller initializes;
+        // the user can still reposition this panel during the current scan.
+        try { localStorage.removeItem(CRC_PANEL_POSITION_KEY); }
+        catch (_) { /* CSS upper-right placement still applies. */ }
         const dragControls = installExtractorDragging(panel);
 
         // Update counters
