@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.7
+// @version      5.8
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,9 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.7';
+    const TUBOL_CATCHER_VERSION = '5.8';
+    // Expose the version that actually initialized (not the loader version).
+    window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
     // Save preferences and only creditor names users explicitly add to the alias dictionary; never save report details.
     const CRC_DISPLAY_KEY = 'tubol-crc-list-display-mode';
@@ -2694,6 +2696,14 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
         };
         grid.querySelectorAll('[data-field], [role="cell"], [role="columnheader"]').forEach(cell => {
             add(cell.innerText || cell.textContent);
+            // CRC shortens long comments in visible text and keeps the real
+            // remark (e.g. "CHARGED OFF ACCOUNT") in the title attribute.
+            if (typeof cell.getAttribute === 'function') add(cell.getAttribute('title'));
+            if (typeof cell.querySelectorAll === 'function') {
+                cell.querySelectorAll('[title]').forEach(node => {
+                    if (typeof node.getAttribute === 'function') add(node.getAttribute('title'));
+                });
+            }
         });
         // Include any extra labels that CRC renders outside the usual cells.
         add(grid.innerText);
@@ -5823,6 +5833,8 @@ function extractInquiries() {
             try {
                 expandNegativeDetails();
                 await waitForNoMoreShowMore(5000, 150);
+                // Allow React to finish inserting cells after the detail toggle.
+                await new Promise(resolve => setTimeout(resolve, 250));
                 try { extractData(); } catch (e) { console.error('extractData failed', e); }
             } catch (e) {
                 console.error(e);
