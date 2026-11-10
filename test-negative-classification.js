@@ -18,9 +18,9 @@ const agencyLogic = between('    function isKnownCollectionAgency(name) {', '   
 const normalizer = between('    function normalizeAccountName(name) {', '    function namesMatch(a, b) {');
 const classifierLogic = between('    // One source of truth for Negative-tab account type.', '    function extractData() {');
 const { classifyNegativeAccountType, isKnownCollectionAgency, hasCollectionEvidence,
-    getNegativeAccountTableText } =
+    getNegativeAccountTableText, getCollectionVerificationWarning } =
     new Function(collectionList + normalizer + agencyLogic + classifierLogic +
-        '\nreturn { classifyNegativeAccountType, isKnownCollectionAgency, hasCollectionEvidence, getNegativeAccountTableText };')();
+        '\nreturn { classifyNegativeAccountType, isKnownCollectionAgency, hasCollectionEvidence, getNegativeAccountTableText, getCollectionVerificationWarning };')();
 
 const examples = [
     ['Original Bank', 'Account Type: Collection Account Status: Closed', 'CHARGE OFF'],
@@ -51,6 +51,16 @@ for (const [creditor, report, expected] of examples) {
         creditor + ': ' + report);
 }
 assert.equal(isKnownCollectionAgency('M'), false, 'Do not match short fragments');
+assert.equal(getCollectionVerificationWarning('MIDLAND CREDIT', 'COLLECTION'), '',
+    'A recognized collection agency must not show the red warning');
+assert.equal(getCollectionVerificationWarning('SPRING OAKS CAPITAL SPV', 'COLLECTION'), '',
+    'Known agency aliases must also suppress the red warning');
+assert.equal(getCollectionVerificationWarning('CAPITAL ONE', 'CHARGE OFF'), '',
+    'Charge-off creditors must not show the collection warning');
+assert.equal(getCollectionVerificationWarning('UNKNOWN AGENCY', 'COLLECTION'),
+    '⚠ VERIFY COLLECTION ACCT', 'An unknown collection label must retain verification warning');
+assert(script.includes('const collectionWarning = getCollectionVerificationWarning(accountName, accountType);'),
+    'Negative account records must use the guarded warning helper');
 assert.equal(hasCollectionEvidence('Collection; Closed'), true);
 assert.equal(hasCollectionEvidence('Account Status: Closed'), false);
 for (const report of [
