@@ -53,6 +53,19 @@ for (const [creditor, report, expected] of examples) {
 assert.equal(isKnownCollectionAgency('M'), false, 'Do not match short fragments');
 assert.equal(hasCollectionEvidence('Collection; Closed'), true);
 assert.equal(hasCollectionEvidence('Account Status: Closed'), false);
+for (const report of [
+    'Account TypeCollectionAccount StatusClosed',
+    'Type:CollectionStatus:Closed',
+    'Account Type: CollectionAccount Status: Closed',
+    'CollectionClosed',
+    'Account TypeCOLLECTIONAccount StatusCLOSED'
+]) {
+    assert.equal(hasCollectionEvidence(report), true, 'Collection must survive concatenated CRC fields');
+    assert.equal(classifyNegativeAccountType('CAPITAL ONE', report), 'CHARGE OFF',
+        'Capital One with Collection and Closed must not become CLOSED LP: ' + report);
+    assert.equal(classifyNegativeAccountType('MIDLAND CREDIT', report), 'COLLECTION',
+        'Registry-listed collection agency must remain COLLECTION: ' + report);
+}
 const makeGrid = (textContent, cells) => ({
     textContent,
     querySelectorAll() { return cells.map(text => ({ textContent: text })); }
@@ -66,6 +79,10 @@ assert.equal(classifyNegativeAccountType('MIDLAND CREDIT', getNegativeAccountTab
 const onlyClosed = makeGrid('Account StatusClosed', ['Account Status', 'Closed']);
 assert.equal(classifyNegativeAccountType('Original Bank', getNegativeAccountTableText(onlyClosed)),
     'CLOSED LP', 'Closed without collection evidence remains a closed account');
+const joinedIntoOneCell = makeGrid('Account TypeCollectionAccount StatusClosed',
+    ['Account TypeCollectionAccount StatusClosed']);
+assert.equal(classifyNegativeAccountType('CAPITAL ONE', getNegativeAccountTableText(joinedIntoOneCell)),
+    'CHARGE OFF', 'Collection embedded in a single CRC cell must override Closed');
 const collectionInsideHeader = makeGrid('CollectionAccount StatusClosed',
     ['Collection', 'Account Status', 'Closed']);
 assert.equal(classifyNegativeAccountType('Original Bank', getNegativeAccountTableText(collectionInsideHeader)),
