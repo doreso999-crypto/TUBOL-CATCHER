@@ -1,5 +1,14 @@
 # TUBOL-CATCHER
 
+## Lower-left status indicator (v5.7)
+
+On Credit Repair Cloud client pages, TUBOL-CATCHER displays a small
+fixed lower-left label: a **green dot** followed by
+`tubol-catcher(v5.7)`. The label is informational, ignores pointer
+events so it cannot block controls, and is created only once per page
+even when the extractor scans multiple clients. The version is also
+updated in the userscript metadata.
+
 ## Collection keyword detection fix (v5.6)
 
 CRC sometimes concatenates values inside an individual rendered cell or raw
