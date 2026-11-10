@@ -1,5 +1,17 @@
 # TUBOL-CATCHER
 
+## Confirmed agency warning and upper-right panel (v5.9)
+
+- Accounts identified as **COLLECTION** by the built-in agency registry
+  (e.g. Midland Credit or Spring Oaks Capital) **no longer show**
+  `⚠ VERIFY COLLECTION ACCT` in red. An unrecognized creditor
+  erroneously labeled COLLECTION still receives the warning so it can
+  be reviewed. **CHARGE OFF** accounts remain warning-free.
+- A newly scanned report always opens the floating extractor at the
+  **upper-right corner**, with the usual 20px top/right offsets.
+  The previous saved drag position is cleared before the panel opens.
+  Manual dragging and minimizing still work during the current scan.
+
 ## Credit-report classification verification (v5.8)
 
 The Negative account classifier now reads **full title/tooltip values** as
