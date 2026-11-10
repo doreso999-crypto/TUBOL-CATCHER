@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.5
+// @version      5.6
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -2674,9 +2674,12 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
     }
 
     function hasCollectionEvidence(accountTableText) {
+        // CRC can concatenate entire field labels and values with no
+        // whitespace ("Account TypeCollectionAccount StatusClosed").
+        // A word-boundary regex misses Collection in those strings.
+        // The input is restricted to the current account's grid text.
         const text = String(accountTableText || '').toLowerCase();
-        return /\bcollections?\b/.test(text) ||
-            /\bplaced\s+for\s+collection\b/.test(text);
+        return text.includes('collection');
     }
 
     function classifyNegativeAccountType(creditorName, accountTableText) {
