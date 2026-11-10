@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.6
+// @version      5.7
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -13,6 +13,8 @@
     // Prevent double-install when script is injected multiple times
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
+
+    const TUBOL_CATCHER_VERSION = '5.7';
 
     // Save preferences and only creditor names users explicitly add to the alias dictionary; never save report details.
     const CRC_DISPLAY_KEY = 'tubol-crc-list-display-mode';
@@ -1200,6 +1202,32 @@ const CSS_STYLES = `
     background: #606162;
 }
 
+
+/* Subtle fixed lower-left script/version indicator. */
+#tubol-catcher-status {
+    position: fixed;
+    left: 16px;
+    bottom: 14px;
+    z-index: 999998;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 9px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, .16);
+    background: rgba(22, 25, 29, .88);
+    color: #f0f2f5;
+    font: 600 12px/1.25 Arial, Helvetica, sans-serif;
+    pointer-events: none;
+    user-select: none;
+}
+#tubol-catcher-status .tubol-catcher-status-dot {
+    width: 7px;
+    height: 7px;
+    flex: 0 0 7px;
+    border-radius: 50%;
+    background: #22c55e;
+}
 
 /* =========================================================
    SCAN BUTTON
@@ -5738,6 +5766,21 @@ function extractInquiries() {
     // INITIALIZE
     // ========================================
 
+    function installCatcherStatusIndicator() {
+        if (document.getElementById('tubol-catcher-status')) return;
+        const indicator = document.createElement('div');
+        indicator.id = 'tubol-catcher-status';
+        indicator.setAttribute('role', 'status');
+        const dot = document.createElement('span');
+        dot.className = 'tubol-catcher-status-dot';
+        dot.setAttribute('aria-hidden', 'true');
+        const label = document.createElement('span');
+        label.textContent = 'tubol-catcher(v' + TUBOL_CATCHER_VERSION + ')';
+        indicator.appendChild(dot);
+        indicator.appendChild(label);
+        document.body.appendChild(indicator);
+    }
+
     // Insert style once
     if (!document.getElementById('crc-styles')) {
         const styleElement = document.createElement("style");
@@ -5745,6 +5788,9 @@ function extractInquiries() {
         styleElement.textContent = CSS_STYLES;
         document.head.appendChild(styleElement);
     }
+
+    // Show script/version in the lower-left corner immediately on activation.
+    installCatcherStatusIndicator();
 
     // Close any open legend popover when clicking outside of it
     // (delegated once so it survives panel re-creation on rescans)
