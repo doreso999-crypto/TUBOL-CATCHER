@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.9
+// @version      5.10
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.9';
+    const TUBOL_CATCHER_VERSION = '5.10';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -2111,6 +2111,9 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
         // of a real collection agency's name is not enough.
         return COLLECTION_AGENCIES.some(nameInRegistry => {
             const agency = normalizeAccountName(nameInRegistry);
+            // "portfolio" alone is ambiguous; don't treat a bank or lender
+            // whose name starts with Portfolio as a collection agency.
+            if (agency === 'portfolio') return creditor === agency;
             return !!agency && (creditor === agency ||
                 creditor.startsWith(agency + ' ') ||
                 creditor.endsWith(' ' + agency));
@@ -2133,7 +2136,8 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
 
     function namesMatch(a, b) {
         if (!a || !b) return false;
-        return (a === b || a.includes(b) || b.includes(a));
+        // A shared creditor fragment does not mean two different accounts match.
+        return a === b;
     }
 
     // ========================================
@@ -2440,17 +2444,33 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
     // or collection that still reports as open).
     // ========================================
 
-    function isOpenAccountNegative(accountName, negativeAccounts) {
-        const acc = normalizeAccountName(accountName);
-
-        if (!acc) return false;
-
-        return (negativeAccounts || []).some(neg => {
-            const negName = normalizeAccountName(neg.account);
-
-            if (!negName) return false;
-
-            return namesMatch(acc, negName);
+    // Only flag an open account as negative when the creditor, visible account
+    // suffix (where available), and reporting bureau overlap. Name substrings
+    // such as CAPITAL ONE and CAPITAL ONE AUTO are not interchangeable.
+    function isOpenAccountNegative(openAccount, negativeAccounts) {
+        const account = typeof openAccount === 'string'
+            ? { account: openAccount } : (openAccount || {});
+        const normalized = normalizeAccountName(account.account);
+        if (!normalized) return false;
+        const suffix = value => {
+            const digits = String(value || '').replace(/\D/g, '');
+            return digits.length >= 4 ? digits.slice(-4) : '';
+        };
+        const bureauCodes = value => {
+            const tokens = String(value || '').toUpperCase().split(/[^A-Z0-9]+/);
+            return tokens.includes('3BR') ? ['EX', 'EQU', 'TU']
+                : ['EX', 'EQU', 'TU'].filter(code => tokens.includes(code));
+        };
+        const openSuffix = suffix(account.account_number);
+        const openBureaus = bureauCodes(account.bureau_display);
+        return (negativeAccounts || []).some(item => {
+            if (!namesMatch(normalized, normalizeAccountName(item.account))) return false;
+            const negativeSuffix = suffix(item.account_number);
+            if (openSuffix && negativeSuffix && openSuffix !== negativeSuffix) return false;
+            const negativeBureaus = bureauCodes(item.bureau_display);
+            if (openBureaus.length && negativeBureaus.length &&
+                !openBureaus.some(code => negativeBureaus.includes(code))) return false;
+            return true;
         });
     }
 
@@ -2683,65 +2703,80 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
         return { list: output, byBureau: byBureau };
     }
 
-    // One source of truth for Negative-tab account type. The word "closed"
-    // describes an account's status and must never override collection evidence.
-    // Join individual table cells with spaces. Plain textContent can merge
-    // neighboring cells into "CollectionClosed" and hide collection evidence.
-    // Stay inside this account's grid so other accounts cannot affect its type.
-    function getNegativeAccountTableText(grid) {
-        const parts = [];
-        const add = value => {
-            const text = String(value || '').replace(/\s+/g, ' ').trim();
-            if (text) parts.push(text);
-        };
-        grid.querySelectorAll('[data-field], [role="cell"], [role="columnheader"]').forEach(cell => {
-            add(cell.innerText || cell.textContent);
-            // CRC shortens long comments in visible text and keeps the real
-            // remark (e.g. "CHARGED OFF ACCOUNT") in the title attribute.
-            if (typeof cell.getAttribute === 'function') add(cell.getAttribute('title'));
-            if (typeof cell.querySelectorAll === 'function') {
-                cell.querySelectorAll('[title]').forEach(node => {
-                    if (typeof node.getAttribute === 'function') add(node.getAttribute('title'));
-                });
-            }
-        });
-        // Include any extra labels that CRC renders outside the usual cells.
-        add(grid.innerText);
-        add(grid.textContent);
-        return parts.join(' ');
+    // Read the actual bureau cell value, not its field label. CRC sometimes
+    // truncates long remarks and exposes their full text in a title attribute.
+    function readCrcCellValue(cell) {
+        if (!cell) return '';
+        const visible = String(cell.textContent || '').replace(/\s+/g, ' ').trim();
+        if (!/[.…]{1,3}$/.test(visible)) return visible;
+        const prefix = visible.replace(/(?:\.{3}|…)$/, '').trim();
+        for (const node of cell.querySelectorAll('[title]')) {
+            const full = String(node.getAttribute('title') || '').replace(/\s+/g, ' ').trim();
+            if (full && prefix && full.startsWith(prefix)) return full;
+        }
+        return visible;
     }
 
-    function hasCollectionEvidence(accountTableText) {
-        // CRC can concatenate entire field labels and values with no
-        // whitespace ("Account TypeCollectionAccount StatusClosed").
-        // A word-boundary regex misses Collection in those strings.
-        // The input is restricted to the current account's grid text.
-        const text = String(accountTableText || '').toLowerCase();
-        return text.includes('collection');
-    }
-
-    function classifyNegativeAccountType(creditorName, accountTableText) {
-        const text = String(accountTableText || '').toLowerCase().replace(/\s+/g, ' ');
-
-        if (/\b(?:included\s+in\s+bankruptcy|discharged\s+through\s+bankruptcy|chapter\s+\d+)\b/.test(text)) {
+    // Work from field VALUES on negatively reporting bureaus only. Scanning
+    // an entire grid for words like "closed" or "collection" also scans field
+    // labels ("Date Closed") and comments from unrelated bureau columns.
+    function classifyNegativeAccountType(creditorName, bureauFields, negativeBureaus) {
+        const negatives = new Set((negativeBureaus || []).map(name => String(name).toLowerCase()));
+        const activeBureaus = CRC_BUREAUS.filter(bureau => negatives.has(bureau.field));
+        const fieldsFor = activeBureaus.map(bureau => ({
+            code: bureau.field === 'experian' ? 'EX' : bureau.field === 'equifax' ? 'EQU' : 'TU',
+            fields: bureauFields?.[bureau.code] || {}
+        }));
+        const evidenceLabels = new Set([
+            'account type', 'type', 'account status', 'status', 'payment status',
+            'creditor remarks', 'remarks', 'remark', 'comments', 'comment',
+            'account description', 'account condition', 'credit status'
+        ]);
+        const supportingValues = fieldsFor.flatMap(entry => Object.entries(entry.fields)
+            .filter(([label]) => evidenceLabels.has(label.replace(/:\s*$/, '').trim().toLowerCase()))
+            .map(([, value]) => String(value || '').replace(/\s+/g, ' ').trim())
+            .filter(Boolean));
+        const hasEvidence = pattern => supportingValues.some(value => pattern.test(value));
+        if (hasEvidence(/\b(?:included\s+in\s+bankruptcy|discharged\s+through\s+bankruptcy|chapter\s+(?:7|11|12|13))\b/i)) {
             return 'INCLUDED IN BANKRUPTCY';
         }
-
-        // The creditor registry, not the reported OPEN/CLOSED account status,
-        // decides whether collection-related data means COLLECTION or CHARGE OFF.
         if (isKnownCollectionAgency(creditorName)) return 'COLLECTION';
-        if (hasCollectionEvidence(text)) return 'CHARGE OFF';
+        if (supportingValues.some(value => /\bcollections?\b/i.test(value) &&
+            !/\b(?:not\s+(?:in\s+|a\s+)?collection|no\s+collection)\b/i.test(value))) return 'CHARGE OFF';
+        if (hasEvidence(/\b(?:charge(?:d)?[ -]?offs?|charged\s+off|profit\s+and\s+loss|write[ -]?offs?|loss\s+by\s+credit\s+grantor)\b/i)) return 'CHARGE OFF';
+        if (hasEvidence(/\b(?:repossess(?:ed|ion)?|involuntary\s+repossession)\b/i)) return 'Repossessed';
+        if (hasEvidence(/\bforeclosure\b/i)) return 'Foreclosure';
 
-        if (/\b(?:charge(?:d)?[ -]?offs?|profit\s+and\s+loss|write[ -]?offs?|loss\s+by\s+credit\s+grantor)\b/.test(text)) {
-            return 'CHARGE OFF';
+        // A status is OPEN/CLOSED only when it appears in the Account Status
+        // row (or an exact Status fallback), never in 'Date Closed' or remarks.
+        const statusByBureau = fieldsFor.map(entry => {
+            const statusEntry = Object.entries(entry.fields).find(([label]) =>
+                label.replace(/:\s*$/, '').trim().toLowerCase() === 'account status') ||
+                Object.entries(entry.fields).find(([label]) =>
+                    label.replace(/:\s*$/, '').trim().toLowerCase() === 'status');
+            const value = String(statusEntry?.[1] || '').replace(/\s+/g, ' ').trim();
+            const kind = /^open\b/i.test(value) ? 'OPEN'
+                : /^closed\b/i.test(value) ? 'CLOSED'
+                : /^paid\b/i.test(value) ? 'PAID'
+                : /^transferred\b/i.test(value) ? 'TRANSFERRED' : '';
+            return { code: entry.code, kind };
+        });
+        const grouped = new Map();
+        statusByBureau.forEach(entry => {
+            if (!entry.kind) return;
+            if (!grouped.has(entry.kind)) grouped.set(entry.kind, []);
+            grouped.get(entry.kind).push(entry.code);
+        });
+        const hasOpen = grouped.has('OPEN');
+        if (grouped.has('TRANSFERRED') || (!hasOpen && hasEvidence(/\btransferred\b/i))) return 'Transferred';
+        if (grouped.size > 1) {
+            return [...grouped.entries()].map(([kind, codes]) =>
+                kind + (kind === 'TRANSFERRED' ? '' : ' LP') + ' (' + codes.join('-') + ')').join(' / ');
         }
-        if (/\b(?:repossess(?:ed|ion)?|involuntary\s+repossession)\b/.test(text)) return 'Repossessed';
-        if (/\bforeclosure\b/.test(text)) return 'Foreclosure';
-        if (/\btransferred\b/.test(text)) return 'Transferred';
-        if (/\bclosed\b/.test(text)) return 'CLOSED LP';
-        if (/\bopen\b/.test(text)) return 'OPEN LP';
-        if (/\bpaid\b/.test(text)) return 'PAID LP';
-        return '';
+        if (hasOpen) return 'OPEN LP';
+        if (grouped.has('CLOSED')) return 'CLOSED LP';
+        if (grouped.has('PAID')) return 'PAID LP';
+        return ''; // Unverified status: do not guess from unrelated words.
     }
 
     function getCollectionVerificationWarning(creditorName, accountType) {
@@ -2764,7 +2799,7 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
                 const labelCell = row.querySelector('[data-field="label"]');
                 const label = String(labelCell?.textContent || '').replace(/:\s*$/, '').trim();
                 const valueCell = row.querySelector('[data-field="' + bureau.field + '"]');
-                const value = String(valueCell?.textContent || '').trim();
+                const value = readCrcCellValue(valueCell);
                 if (!label || !value || value === '-' || value === '--') return;
                 const prior = fields[label];
                 fields[label] = prior && prior !== value ? prior + ' | ' + value : value;
@@ -2896,26 +2931,6 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
 
             if (bureaus.length === 0) return;
 
-            function getRowValue(label, bureau) {
-                let row = grid.querySelector(`[data-id*="${label}"]`);
-                if (!row) return "";
-                let cell = row.querySelector(`[data-field="${bureau}"]`);
-                return cell ? (cell.textContent || '').trim() : "";
-            }
-
-            function getPriorityRowValue(label) {
-                const priority = getBureauPriorityOrder(crcBureauPriority);
-                for (const bureau of priority) {
-                    let isNegative = bureaus.map(b => b.toLowerCase()).includes(bureau);
-                    if (!isNegative) continue;
-                    const value = getRowValue(label, bureau);
-                    if (value && value !== "-" && value !== "--") {
-                        return value;
-                    }
-                }
-                return "";
-            }
-
             function getPriorityValue(label) {
                 const priority = getBureauPriorityOrder(crcBureauPriority);
                 let rows = grid.querySelectorAll('.MuiDataGrid-row');
@@ -2929,7 +2944,7 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
                         if (rowLabel === label.toLowerCase()) {
                             let cell = row.querySelector(`[data-field="${bureau}"]`);
                             if (cell) {
-                                let value = (cell.textContent || '').trim();
+                                let value = readCrcCellValue(cell);
                                 if (value && value !== "-" && value !== "--") {
                                     return value;
                                 }
@@ -2969,15 +2984,11 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
                 return "";
             }
 
-            function getAccountType() {
-                // Include all visible account-grid cells, keeping their word boundaries.
-                return classifyNegativeAccountType(accountName, getNegativeAccountTableText(grid));
-            }
-
+            const bureauFields = collectNegativeBureauFields(rows, bureaus);
             let balance = getBalanceValue();
-            let accountType = getAccountType();
-            let late = getPriorityRowValue("Late Payment Status");
-            let comments = getPriorityRowValue("Comments");
+            let accountType = classifyNegativeAccountType(accountName, bureauFields, bureaus);
+            let late = getPriorityValue('Late Payment Status');
+            let comments = getPriorityValue('Comments') || getPriorityValue('Creditor Remarks');
 
             let bureauDisplay = "";
             let bureauSet = bureaus.map(b => b.toLowerCase());
@@ -2996,7 +3007,7 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
 
             output.push({
                 account: accountName,
-                bureau_fields: collectNegativeBureauFields(rows, bureaus),
+                bureau_fields: bureauFields,
                 account_number: accountNumber,
                 bureau_display: bureauDisplay.trim(),
                 balance: balance,
@@ -5249,7 +5260,7 @@ function extractInquiries() {
 
             accounts.forEach(acc => {
                 const card = document.createElement('div');
-                const isNegative = isOpenAccountNegative(acc.account, negativeData);
+                const isNegative = isOpenAccountNegative(acc, negativeData);
                 card.className = 'crc-open-account ' + (isNegative ? 'crc-open-negative-card' : 'crc-open-positive-card');
 
                 const h = document.createElement('b');
