@@ -2768,11 +2768,13 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
             grouped.get(entry.kind).push(entry.code);
         });
         const hasOpen = grouped.has('OPEN');
-        if (grouped.has('TRANSFERRED') || (!hasOpen && hasEvidence(/\btransferred\b/i))) return 'Transferred';
+        // Preserve conflicting per-bureau states. A transferred account on TU
+        // must not erase an explicit OPEN status on EX (or vice versa).
         if (grouped.size > 1) {
             return [...grouped.entries()].map(([kind, codes]) =>
                 kind + (kind === 'TRANSFERRED' ? '' : ' LP') + ' (' + codes.join('-') + ')').join(' / ');
         }
+        if (grouped.has('TRANSFERRED') || (!hasOpen && hasEvidence(/\btransferred\b/i))) return 'Transferred';
         if (hasOpen) return 'OPEN LP';
         if (grouped.has('CLOSED')) return 'CLOSED LP';
         if (grouped.has('PAID')) return 'PAID LP';
