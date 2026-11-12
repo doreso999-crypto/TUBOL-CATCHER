@@ -2737,16 +2737,22 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
             .map(([, value]) => String(value || '').replace(/\s+/g, ' ').trim())
             .filter(Boolean));
         const hasEvidence = pattern => supportingValues.some(value => pattern.test(value));
-        if (hasEvidence(/\b(?:included\s+in\s+bankruptcy|discharged\s+through\s+bankruptcy|chapter\s+(?:7|11|12|13))\b/i)) {
+        const hasOriginalCreditor = fieldsFor.some(entry => Object.entries(entry.fields).some(([label, value]) =>
+            label.replace(/:\s*$/, '').trim().toLowerCase() === 'original creditor' &&
+            String(value || '').trim() && !['-', '--'].includes(String(value).trim())));
+
+        if (hasEvidence(/\b(?:bankrupt(?:cy)?|chapter\s+(?:7|11|12|13)|included\s+in\s+bankruptcy|discharged\s+through\s+bankruptcy)\b/i)) {
             return 'INCLUDED IN BANKRUPTCY';
         }
         if (isKnownCollectionAgency(creditorName)) return 'COLLECTION';
-        // Explicit charge-off language is decisive. Generic COLLECTION labels
-        // are not: CRC can show COLLECTION in Account Rating/Payment Status
-        // while the actual Account Status is still OPEN.
-        if (hasEvidence(/\b(?:charge(?:d)?[ -]?offs?|charged\s+off|profit\s+and\s+loss|write[ -]?offs?|loss\s+by\s+credit\s+grantor)\b/i)) return 'CHARGE OFF';
         if (hasEvidence(/\b(?:repossess(?:ed|ion)?|involuntary\s+repossession)\b/i)) return 'Repossessed';
-        if (hasEvidence(/\bforeclosure\b/i)) return 'Foreclosure';
+        if (hasEvidence(/\btransferred\b/i)) return 'Transferred';
+        if (hasEvidence(/\b(?:charge(?:d)?[ -]?offs?|charged\s+off|profit\s+and\s+loss|write[ -]?offs?|loss\s+by\s+credit\s+grantor)\b/i)) {
+            return 'CHARGE OFF';
+        }
+        if (hasEvidence(/\bcollections?\b/i)) {
+            return hasOriginalCreditor ? 'COLLECTION' : 'CHARGE OFF';
+        }
 
         const statusByBureau = fieldsFor.map(entry => {
             const statusEntry = Object.entries(entry.fields).find(([label]) =>
@@ -2766,24 +2772,15 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
             if (!grouped.has(entry.kind)) grouped.set(entry.kind, []);
             grouped.get(entry.kind).push(entry.code);
         });
-        const hasOpen = grouped.has('OPEN');
-        // Preserve conflicting per-bureau states. A transferred account on TU
-        // must not erase an explicit OPEN status on EX (or vice versa).
         if (grouped.size > 1) {
             return [...grouped.entries()].map(([kind, codes]) =>
                 kind + (kind === 'TRANSFERRED' ? '' : ' LP') + ' (' + codes.join('-') + ')').join(' / ');
         }
-        if (grouped.has('TRANSFERRED') || (!hasOpen && hasEvidence(/\btransferred\b/i))) return 'Transferred';
-        if (hasOpen) return 'OPEN LP';
-        // For non-agency creditors, generic collection wording is a fallback
-        // only when no explicit OPEN/PAID/CLOSED status was found. This keeps
-        // an OPEN account from becoming a charge-off due to rating/payment
-        // descriptors, while preserving the existing closed-collection rule.
-        if (supportingValues.some(value => /\bcollections?\b/i.test(value) &&
-            !/\b(?:not\s+(?:in\s+|a\s+)?collection|no\s+collection)\b/i.test(value))) return 'CHARGE OFF';
+        if (grouped.has('TRANSFERRED')) return 'Transferred';
+        if (grouped.has('OPEN')) return 'OPEN LP';
         if (grouped.has('CLOSED')) return 'CLOSED LP';
         if (grouped.has('PAID')) return 'PAID LP';
-        return ''; // Unverified status: do not guess from unrelated words.
+        return '';
     }
 
     function getCollectionVerificationWarning(creditorName, accountType) {
