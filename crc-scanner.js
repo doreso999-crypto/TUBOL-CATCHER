@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.10';
+    const TUBOL_CATCHER_VERSION = '5.11';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -2741,14 +2741,13 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
             return 'INCLUDED IN BANKRUPTCY';
         }
         if (isKnownCollectionAgency(creditorName)) return 'COLLECTION';
-        if (supportingValues.some(value => /\bcollections?\b/i.test(value) &&
-            !/\b(?:not\s+(?:in\s+|a\s+)?collection|no\s+collection)\b/i.test(value))) return 'CHARGE OFF';
+        // Explicit charge-off language is decisive. Generic COLLECTION labels
+        // are not: CRC can show COLLECTION in Account Rating/Payment Status
+        // while the actual Account Status is still OPEN.
         if (hasEvidence(/\b(?:charge(?:d)?[ -]?offs?|charged\s+off|profit\s+and\s+loss|write[ -]?offs?|loss\s+by\s+credit\s+grantor)\b/i)) return 'CHARGE OFF';
         if (hasEvidence(/\b(?:repossess(?:ed|ion)?|involuntary\s+repossession)\b/i)) return 'Repossessed';
         if (hasEvidence(/\bforeclosure\b/i)) return 'Foreclosure';
 
-        // A status is OPEN/CLOSED only when it appears in the Account Status
-        // row (or an exact Status fallback), never in 'Date Closed' or remarks.
         const statusByBureau = fieldsFor.map(entry => {
             const statusEntry = Object.entries(entry.fields).find(([label]) =>
                 label.replace(/:\s*$/, '').trim().toLowerCase() === 'account status') ||
@@ -2776,6 +2775,12 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
         }
         if (grouped.has('TRANSFERRED') || (!hasOpen && hasEvidence(/\btransferred\b/i))) return 'Transferred';
         if (hasOpen) return 'OPEN LP';
+        // For non-agency creditors, generic collection wording is a fallback
+        // only when no explicit OPEN/PAID/CLOSED status was found. This keeps
+        // an OPEN account from becoming a charge-off due to rating/payment
+        // descriptors, while preserving the existing closed-collection rule.
+        if (supportingValues.some(value => /\bcollections?\b/i.test(value) &&
+            !/\b(?:not\s+(?:in\s+|a\s+)?collection|no\s+collection)\b/i.test(value))) return 'CHARGE OFF';
         if (grouped.has('CLOSED')) return 'CLOSED LP';
         if (grouped.has('PAID')) return 'PAID LP';
         return ''; // Unverified status: do not guess from unrelated words.
