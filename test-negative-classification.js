@@ -32,14 +32,14 @@ const openCollectionLabels = {
         'Account Type': 'REVOLVING'
     }
 };
-assert.equal(classify('CAPITAL ONE', openCollectionLabels), 'OPEN LP',
-    'An OPEN account must not become CHARGE OFF from generic COLLECTION labels');
+assert.equal(classify('CAPITAL ONE', openCollectionLabels), 'CHARGE OFF',
+    'An OPEN account with generic COLLECTION wording from a non-agency creditor is CHARGE OFF');
 assert.equal(classify('CAPITAL ONE', {
     EX: { ...openCollectionLabels.EX, 'Creditor Remarks': 'ACCOUNT CLOSED, CHARGED OFF ACCOUNT' }
 }), 'CHARGE OFF', 'Explicit charge-off wording must still take precedence');
 assert.equal(classify('Original Bank', {
-    EX: { 'Account Type': 'Collection Account', 'Account Status': 'CLOSED' }
-}), 'CHARGE OFF', 'Generic collection evidence on a closed non-agency account retains legacy behavior');
+    EX: { 'Account Type': 'Collection Account', 'Account Status': 'CLOSED', 'Original Creditor': 'ORIGINAL BANK' }
+}), 'COLLECTION', 'Collection wording with Original Creditor details is COLLECTION');
 assert.equal(classify('MIDLAND CREDIT', {
     EX: { 'Account Status': 'OPEN', 'Payment Status': 'CURRENT' }
 }), 'COLLECTION', 'Known collection agencies remain COLLECTION');
@@ -48,14 +48,19 @@ assert.equal(classify('Original Bank', {
 }), 'CLOSED LP', 'Closed without collection evidence remains CLOSED LP');
 assert.equal(classify('Original Bank', {
     EX: { 'Account Type': 'Collection Account' }
-}), 'CHARGE OFF', 'Collection evidence without a reported status remains a charge-off fallback');
+}), 'CHARGE OFF', 'Collection wording without Original Creditor details is CHARGE OFF');
+assert.equal(classify('Original Bank', { EX: { 'Account Status': 'OPEN' } }), 'OPEN LP');
+assert.equal(classify('Original Bank', { EX: { 'Account Status': 'CLOSED' } }), 'CLOSED LP');
+assert.equal(classify('Original Bank', { EX: { 'Account Status': 'OPEN', 'Creditor Remarks': 'CHAPTER 7 BANKRUPTCY' } }), 'INCLUDED IN BANKRUPTCY');
+assert.equal(classify('Original Bank', { EX: { 'Account Status': 'CLOSED', 'Creditor Remarks': 'REPOSSESSED' } }), 'Repossessed');
+assert.equal(classify('Original Bank', { EX: { 'Account Status': 'OPEN', 'Creditor Remarks': 'TRANSFERRED' } }), 'Transferred');
 assert.equal(classify('Original Bank', {
     EX: { 'Account Status': 'OPEN' },
     EQU: { 'Account Type': 'Collection', 'Account Status': 'CLOSED' }
 }, ['experian']), 'OPEN LP', 'Evidence from a non-negative bureau must not override the negative bureau');
 assert.equal(classify('Original Bank', {
-    EX: { 'Account Status': 'OPEN', 'Payment Status': 'COLLECTION' },
+    EX: { 'Account Status': 'OPEN' },
     TU: { 'Account Status': 'CLOSED' }
 }, ['experian', 'transunion']), 'OPEN LP (EX) / CLOSED LP (TU)',
     'Conflicting bureau statuses must remain separately visible');
-console.log('PASS: OPEN-vs-COLLECTION priority, explicit charge-off, closed fallback, agency, and bureau-isolation cases');
+console.log('PASS: requested status, charge-off, collection, bankruptcy, repossession, transfer, agency, and bureau-isolation cases');
