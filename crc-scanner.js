@@ -2750,6 +2750,9 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
         if (hasEvidence(/\b(?:charge(?:d)?[ -]?offs?|charged\s+off|profit\s+and\s+loss|write[ -]?offs?|loss\s+by\s+credit\s+grantor)\b/i)) {
             return 'CHARGE OFF';
         }
+        if (hasEvidence(/\b(?:other\s+collection\s+agencies|placed\s+for\s+collection)\b/i)) {
+            return 'COLLECTION';
+        }
         if (hasEvidence(/\bcollections?\b/i)) {
             return hasOriginalCreditor ? 'COLLECTION' : 'CHARGE OFF';
         }
