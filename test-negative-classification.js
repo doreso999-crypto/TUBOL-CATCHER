@@ -49,6 +49,8 @@ assert.equal(classify('Original Bank', {
 assert.equal(classify('Original Bank', {
     EX: { 'Account Type': 'Collection Account' }
 }), 'CHARGE OFF', 'Collection wording without Original Creditor details is CHARGE OFF');
+assert.equal(classify('Original Bank', { EX: { 'Creditor Remarks': 'PLACED FOR COLLECTION' } }), 'COLLECTION');
+assert.equal(classify('Original Bank', { EX: { 'Creditor Remarks': 'OTHER COLLECTION AGENCIES' } }), 'COLLECTION');
 assert.equal(classify('Original Bank', { EX: { 'Account Status': 'OPEN' } }), 'OPEN LP');
 assert.equal(classify('Original Bank', { EX: { 'Account Status': 'CLOSED' } }), 'CLOSED LP');
 assert.equal(classify('Original Bank', { EX: { 'Account Status': 'OPEN', 'Creditor Remarks': 'CHAPTER 7 BANKRUPTCY' } }), 'INCLUDED IN BANKRUPTCY');
