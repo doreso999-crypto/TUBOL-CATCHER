@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.10
+// @version      5.12
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -5282,7 +5282,7 @@ function extractInquiries() {
                 { title: "Equifax", items: newInquiries.filter(i => i.equifax) },
                 { title: "TransUnion", items: newInquiries.filter(i => i.transunion) }
             ];
-            newInquiriesView.querySelectorAll('.crc-inquiry-bureau-group, .crc-empty-state').forEach(node => node.remove());
+            newInquiriesView.querySelectorAll('.crc-inquiry-section').forEach(node => node.remove());
             copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups,
                 newInquiryLastReportDate ? "No inquiries since the last report date" : "No recent inquiries",
                 crcCopyConnectedNew, openInquiryAliasDialog, crcNewInquiryDisplayMode);
