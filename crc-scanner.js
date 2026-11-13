@@ -4931,6 +4931,15 @@ function extractInquiries() {
 
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
+
+        const bankruptcyTables = extractBankruptcyTables();
+        let openAccountsData = extractOpenAccounts();
+        let openAccounts = openAccountsData.list;
+        let openAccountsByBureau = openAccountsData.byBureau;
+        let inquiries = extractInquiries();
+        let previousAddresses = extractPreviousAddresses();
+        let employers = extractEmployers();
+
         // Store a local report snapshot asynchronously; extraction remains unchanged.
         const historyClientName = getCurrentClientName();
         const historySnapshot = tubolBuildHistorySnapshot(historyClientName, negativeData, bankruptcyTables, inquiries);
@@ -4943,13 +4952,6 @@ function extractInquiries() {
             if (currentPanel) tubolInstallHistoryNotice(currentPanel, historyClientName || 'this client', {saved:false,reason:error.message});
         });
 
-        const bankruptcyTables = extractBankruptcyTables();
-        let openAccountsData = extractOpenAccounts();
-        let openAccounts = openAccountsData.list;
-        let openAccountsByBureau = openAccountsData.byBureau;
-        let inquiries = extractInquiries();
-        let previousAddresses = extractPreviousAddresses();
-        let employers = extractEmployers();
 
         // ========================================
         // CONNECT INQUIRIES TO OPEN ACCOUNTS
