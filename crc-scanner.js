@@ -4950,17 +4950,6 @@ function extractInquiries() {
         let previousAddresses = extractPreviousAddresses();
         let employers = extractEmployers();
 
-        // Store a local report snapshot asynchronously; extraction remains unchanged.
-        const historyClientName = getCurrentClientName();
-        const historySnapshot = tubolBuildHistorySnapshot(historyClientName, negativeData, bankruptcyTables, inquiries);
-        tubolSaveHistorySnapshot(historySnapshot).then(diff => {
-            const currentPanel = document.getElementById('crc-negative-panel');
-            if (currentPanel) tubolInstallHistoryNotice(currentPanel, historyClientName || 'this client', diff);
-        }).catch(error => {
-            console.warn('TUBOL-CATCHER local history could not be saved:', error);
-            const currentPanel = document.getElementById('crc-negative-panel');
-            if (currentPanel) tubolInstallHistoryNotice(currentPanel, historyClientName || 'this client', {saved:false,reason:error.message});
-        });
 
 
         // ========================================
@@ -5009,6 +4998,16 @@ function extractInquiries() {
         try { localStorage.removeItem(CRC_PANEL_POSITION_KEY); }
         catch (_) { /* CSS upper-right placement still applies. */ }
         const dragControls = installExtractorDragging(panel);
+
+        // Save this scan only after its own panel exists, so its alert cannot land on another client's panel.
+        const historyClientName = getCurrentClientName();
+        const historySnapshot = tubolBuildHistorySnapshot(historyClientName, negativeData, bankruptcyTables, inquiries);
+        tubolSaveHistorySnapshot(historySnapshot).then(diff => {
+            if (panel.isConnected) tubolInstallHistoryNotice(panel, historyClientName || 'this client', diff);
+        }).catch(error => {
+            console.warn('TUBOL-CATCHER local history could not be saved:', error);
+            if (panel.isConnected) tubolInstallHistoryNotice(panel, historyClientName || 'this client', {saved:false,reason:error.message});
+        });
 
         // Update counters
         panel.querySelector('[data-negative-count]').textContent = negativeData.length;
