@@ -4289,6 +4289,7 @@ function extractInquiries() {
         const openList=cloneList(snapshot.openAccountsView,inquiryPanes.open);
         addIntro(inquiryPanes.new, snapshot.newInquiryLastReportDate ? 'Inquiries dated after ' + snapshot.newInquiryLastReportDate + ' through the report date.' : 'Recent inquiries (last 35 days) from the extracted report.');
         const newList=cloneList(snapshot.newInquiriesView,inquiryPanes.new);
+        newList.querySelectorAll('.crc-new-inquiry-date-controls').forEach(node => node.remove());
         inquiryTabs.set('inquiries',makeTab(inquiryNav,'Inquiries',()=>selectInquiryMode('inquiries')));
         inquiryTabs.set('open',makeTab(inquiryNav,'Open accounts',()=>selectInquiryMode('open')));
         inquiryTabs.set('new',makeTab(inquiryNav,'New inquiries',()=>selectInquiryMode('new')));
@@ -5138,6 +5139,7 @@ function extractInquiries() {
 
         // Per-report override for clients paused beyond the automatic 35-day window.
         const newInquiryDateControls = document.createElement('div');
+        newInquiryDateControls.className = 'crc-new-inquiry-date-controls';
         newInquiryDateControls.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px 4px;';
         const newInquiryDateLabel = document.createElement('label');
         newInquiryDateLabel.textContent = 'Last Report Date';
