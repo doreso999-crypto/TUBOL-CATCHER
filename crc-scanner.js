@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.16
+// @version      5.17
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.16';
+    const TUBOL_CATCHER_VERSION = '5.17';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -4892,23 +4892,39 @@ function extractInquiries() {
         return {firstScan:!previous,previousScanAt:previous ? previous.scannedAt : '',negative:compare(previous && previous.negativeRecords,current.negativeRecords),inquiries:compare(previous && previous.inquiryRecords,current.inquiryRecords)};
     }
 
+    function tubolHistoryLocalDate(value) {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '';
+        return [date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
+    }
+
     async function tubolSaveHistorySnapshot(snapshot) {
         if (!snapshot.clientName) return {skipped:true,reason:'Client name could not be identified; report was not saved.'};
         const db = await openTubolHistoryDb();
         try {
-            const previous = await new Promise((resolve,reject) => {
+            const rows = await new Promise((resolve,reject) => {
                 const tx = db.transaction(TUBOL_HISTORY_STORE,'readonly');
                 const req = tx.objectStore(TUBOL_HISTORY_STORE).index('clientKey').getAll(snapshot.clientKey);
-                req.onsuccess = () => { const rows=(req.result||[]).sort((a,b)=>String(b.scannedAt).localeCompare(String(a.scannedAt))); resolve(rows[0]||null); };
+                req.onsuccess = () => resolve((req.result||[]).sort((a,b)=>String(b.scannedAt).localeCompare(String(a.scannedAt))));
                 req.onerror = () => reject(req.error);
             });
+            // One saved snapshot per client per local calendar date. Re-scanning
+            // today replaces today's snapshot and compares against the prior day.
+            const today = tubolHistoryLocalDate(snapshot.scannedAt);
+            const sameDay = rows.filter(row => tubolHistoryLocalDate(row.scannedAt) === today);
+            const previous = rows.find(row => tubolHistoryLocalDate(row.scannedAt) !== today) || null;
+            const existing = sameDay[0] || null;
             const diff = tubolCompareHistory(previous,snapshot);
             await new Promise((resolve,reject) => {
                 const tx=db.transaction(TUBOL_HISTORY_STORE,'readwrite');
-                tx.objectStore(TUBOL_HISTORY_STORE).add(snapshot);
+                const store=tx.objectStore(TUBOL_HISTORY_STORE);
+                if (existing) store.put({...snapshot,id:existing.id});
+                else store.add(snapshot);
+                // Clean up any duplicate same-day rows already present.
+                sameDay.slice(1).forEach(row => store.delete(row.id));
                 tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error); tx.onabort=()=>reject(tx.error||new Error('Save aborted.'));
             });
-            return {...diff,saved:true};
+            return {...diff,saved:true,overwritten:!!existing};
         } finally { db.close(); }
     }
 
