@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.19
+// @version      5.20
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.19';
+    const TUBOL_CATCHER_VERSION = '5.20';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -5132,7 +5132,7 @@ h2{margin:0;font-size:14px;font-weight:700;letter-spacing:-.1px}
 
         const root = d.createElement('main');
         root.className = 'page';
-        root.innerHTML = `<header class="top"><div><p class="eyebrow">TUBOL-CATCHER / CLIENT RECORDS</p><h1>Report history</h1><p class="subtitle">A local record of what each scan found.</p></div></header><div class="toolbar"><select id="client" aria-label="Choose client"></select><button class="btn" id="refresh" type="button">Refresh</button><button class="btn btn-primary" id="export" type="button">Export data</button><span class="updated" id="updated"></span></div><section class="summary" aria-label="Report summary"><div class="metric"><span class="metric-label">Saved scans</span><strong class="metric-value" id="scans">0</strong></div><div class="metric"><span class="metric-label">Accounts no longer found</span><strong class="metric-value neutral" id="neg">—</strong></div><div class="metric"><span class="metric-label">Inquiries no longer found</span><strong class="metric-value neutral" id="inq">—</strong></div><div class="metric"><span class="metric-label">New entries</span><strong class="metric-value neutral" id="added">—</strong></div></section><section class="section-grid"><article class="card"><div class="card-head"><h2>Accounts missing from latest scan</h2></div><p class="card-help">Previously recorded accounts not found in the most recent scan.</p><div id="goneNeg" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Inquiries missing from latest scan</h2></div><p class="card-help">Previously recorded inquiries not found in the most recent scan.</p><div id="goneInq" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>New since previous scan</h2></div><p class="card-help">Entries present in the latest scan but absent from the one before it.</p><div id="addedItems" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Latest scan · account list</h2></div><p class="card-help">Negative accounts recorded in the most recent scan.</p><div id="inventory" class="empty">Loading reports…</div></article></section><section class="card timeline"><div class="timeline-head"><h2>Scan log</h2></div><p class="card-help">Saved locally on this device, newest first.</p><div id="timeline" class="empty">Loading reports…</div></section><p class="footnote">Items missing from a scan are not proof that a bureau or creditor deleted them. When a local folder is connected, the history is also saved in tubol-catcher-report-history.json on your computer. The browser copy is only a working copy; keep the JSON file to protect your history from browser-data cleanup. This is separate from Credit Repair Cloud.</p>`;
+        root.innerHTML = `<header class="top"><div><p class="eyebrow">TUBOL-CATCHER / CLIENT RECORDS</p><h1>Report history</h1><p class="subtitle">A local record of what each scan found.</p></div></header><div class="toolbar"><select id="client" aria-label="Choose client"></select><button class="btn" id="refresh" type="button">Refresh</button><button class="btn btn-primary" id="export" type="button">Export data</button><span class="updated" id="updated"></span></div><section class="summary" aria-label="Report summary"><div class="metric"><span class="metric-label">Saved scans</span><strong class="metric-value" id="scans">0</strong></div><div class="metric"><span class="metric-label">Accounts no longer found</span><strong class="metric-value neutral" id="neg">—</strong></div><div class="metric"><span class="metric-label">Inquiries no longer found</span><strong class="metric-value neutral" id="inq">—</strong></div><div class="metric"><span class="metric-label">New entries</span><strong class="metric-value neutral" id="added">—</strong></div></section><section class="section-grid"><article class="card"><div class="card-head"><h2>Accounts missing from latest scan</h2></div><p class="card-help">Previously recorded accounts not found in the most recent scan.</p><div id="goneNeg" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Inquiries missing from latest scan</h2></div><p class="card-help">Previously recorded inquiries not found in the most recent scan.</p><div id="goneInq" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>New since previous scan</h2></div><p class="card-help">Entries present in the latest scan but absent from the one before it.</p><div id="addedItems" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Latest scan · account list</h2></div><p class="card-help">Negative accounts recorded in the most recent scan.</p><div id="inventory" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Latest scan · inquiry list</h2></div><p class="card-help">All inquiries recorded in the most recent scan, grouped by bureau.</p><div id="inquiryInventory" class="empty">Loading reports…</div></article></section><section class="card timeline"><div class="timeline-head"><h2>Scan log</h2></div><p class="card-help">Saved locally on this device, newest first.</p><div id="timeline" class="empty">Loading reports…</div></section><p class="footnote">Items missing from a scan are not proof that a bureau or creditor deleted them. When a local folder is connected, the history is also saved in tubol-catcher-report-history.json on your computer. The browser copy is only a working copy; keep the JSON file to protect your history from browser-data cleanup. This is separate from Credit Repair Cloud.</p>`;
         d.body.appendChild(root);
 
         const el = id => d.getElementById(id);
@@ -5153,7 +5153,7 @@ h2{margin:0;font-size:14px;font-weight:700;letter-spacing:-.1px}
             if (!items.length) {
                 box.className = 'empty';
                 box.textContent = type === 'removed' ? 'No items missing from the latest report.' :
-                    type === 'new' ? 'No new items since the previous report.' : 'No negative accounts were saved in this scan.';
+                    type === 'new' ? 'No new items since the previous report.' : (id === 'inquiryInventory' ? 'No inquiries were saved in this scan.' : 'No negative accounts were saved in this scan.');
                 return;
             }
             box.className = '';
@@ -5183,6 +5183,7 @@ h2{margin:0;font-size:14px;font-weight:700;letter-spacing:-.1px}
             showItems('goneInq',previous ? diff.inquiries.disappeared : [],'removed');
             showItems('addedItems',previous ? diff.negative.added.concat(diff.inquiries.added) : [],'new');
             showItems('inventory',latest ? latest.negativeRecords : [],'saved');
+            showItems('inquiryInventory',latest ? latest.inquiryRecords : [],'saved');
             const timeline = el('timeline'); timeline.replaceChildren();
             if (!clientRows.length) {
                 timeline.className = 'empty';
