@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.11';
+    const TUBOL_CATCHER_VERSION = '5.12';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -2534,6 +2534,21 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
         });
     }
 
+    function filterInquiriesAfterDate(inquiryList, afterDate) {
+        const match = String(afterDate || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!match) return [];
+        const cutoff = new Date(+match[1], +match[2] - 1, +match[3]);
+        if (cutoff.getFullYear() !== +match[1] || cutoff.getMonth() !== +match[2] - 1 || cutoff.getDate() !== +match[3]) return [];
+        cutoff.setHours(0, 0, 0, 0);
+        const today = new Date(); today.setHours(0, 0, 0, 0);
+        return (inquiryList || []).filter(item => {
+            const date = parseInquiryDate(item.date);
+            if (!date) return false;
+            date.setHours(0, 0, 0, 0);
+            return date > cutoff && date <= today;
+        });
+    }
+
     function expandNegativeDetails() {
         // Limit clicks to buttons inside data grids to avoid unintended clicks
         const grids = document.querySelectorAll('.MuiDataGrid-root');
@@ -4272,7 +4287,7 @@ function extractInquiries() {
         const regularList=cloneList(snapshot.inquiriesView,inquiryPanes.inquiries);
         addIntro(inquiryPanes.open,'All open accounts from the extracted report.');
         const openList=cloneList(snapshot.openAccountsView,inquiryPanes.open);
-        addIntro(inquiryPanes.new,'Recent inquiries (last 35 days) from the extracted report.');
+        addIntro(inquiryPanes.new, snapshot.newInquiryLastReportDate ? 'Inquiries dated after ' + snapshot.newInquiryLastReportDate + ' through the report date.' : 'Recent inquiries (last 35 days) from the extracted report.');
         const newList=cloneList(snapshot.newInquiriesView,inquiryPanes.new);
         inquiryTabs.set('inquiries',makeTab(inquiryNav,'Inquiries',()=>selectInquiryMode('inquiries')));
         inquiryTabs.set('open',makeTab(inquiryNav,'Open accounts',()=>selectInquiryMode('open')));
@@ -5121,6 +5136,31 @@ function extractInquiries() {
         newInquiriesView.className = 'crc-new-inquiries-view';
         newInquiriesView.style.display = 'none';
 
+        // Per-report override for clients paused beyond the automatic 35-day window.
+        const newInquiryDateControls = document.createElement('div');
+        newInquiryDateControls.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 14px 4px;';
+        const newInquiryDateLabel = document.createElement('label');
+        newInquiryDateLabel.textContent = 'Last Report Date';
+        newInquiryDateLabel.style.cssText = 'font-size:13px;font-weight:700;color:#b0b3b8;';
+        const newInquiryDateInput = document.createElement('input');
+        newInquiryDateInput.type = 'date';
+        newInquiryDateInput.id = 'crc-new-inquiry-last-report-date';
+        newInquiryDateInput.setAttribute('aria-label', 'Last report date');
+        newInquiryDateInput.style.cssText = 'min-height:34px;padding:5px 8px;background:#242526;color:#e4e6eb;border:1px solid #55585b;border-radius:7px;';
+        const newInquiryDateApply = document.createElement('button');
+        newInquiryDateApply.type = 'button';
+        newInquiryDateApply.textContent = 'Apply';
+        newInquiryDateApply.style.cssText = 'min-height:34px;padding:6px 12px;background:#2374e1;color:#fff;border:0;border-radius:7px;font-weight:700;cursor:pointer;';
+        const newInquiryDateClear = document.createElement('button');
+        newInquiryDateClear.type = 'button';
+        newInquiryDateClear.textContent = 'Auto (35 days)';
+        newInquiryDateClear.style.cssText = 'min-height:34px;padding:6px 10px;background:#3a3b3c;color:#e4e6eb;border:1px solid #55585b;border-radius:7px;cursor:pointer;';
+        const newInquiryDateNote = document.createElement('div');
+        newInquiryDateNote.style.cssText = 'flex-basis:100%;font-size:12px;line-height:1.4;color:#9da3aa;';
+        newInquiryDateNote.textContent = 'Optional: show inquiries dated after the previous report date through today.';
+        newInquiryDateControls.append(newInquiryDateLabel, newInquiryDateInput, newInquiryDateApply, newInquiryDateClear, newInquiryDateNote);
+        newInquiriesView.appendChild(newInquiryDateControls);
+
         inquiriesDiv.appendChild(inquiriesView);
         inquiriesDiv.appendChild(openAccountsView);
         inquiriesDiv.appendChild(newInquiriesView);
@@ -5228,17 +5268,48 @@ function extractInquiries() {
         // NEW INQUIRIES (today back to 35 days ago)
         // ========================================
 
-        const newInquiries = filterRecentInquiries(inquiries, 35);
+        let newInquiryLastReportDate = '';
+        let newInquiries = [];
+        let newBureauGroups = [];
+        let copyTextNewInquiries = '';
 
-        const newBureauGroups = [
-            { title: "Experian", items: newInquiries.filter(i => i.experian) },
-            { title: "Equifax", items: newInquiries.filter(i => i.equifax) },
-            { title: "TransUnion", items: newInquiries.filter(i => i.transunion) }
-        ];
+        function refreshNewInquiryDateFilter() {
+            newInquiries = newInquiryLastReportDate
+                ? filterInquiriesAfterDate(inquiries, newInquiryLastReportDate)
+                : filterRecentInquiries(inquiries, 35);
+            newBureauGroups = [
+                { title: "Experian", items: newInquiries.filter(i => i.experian) },
+                { title: "Equifax", items: newInquiries.filter(i => i.equifax) },
+                { title: "TransUnion", items: newInquiries.filter(i => i.transunion) }
+            ];
+            newInquiriesView.querySelectorAll('.crc-inquiry-bureau-group, .crc-empty-state').forEach(node => node.remove());
+            copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups,
+                newInquiryLastReportDate ? "No inquiries since the last report date" : "No recent inquiries",
+                crcCopyConnectedNew, openInquiryAliasDialog, crcNewInquiryDisplayMode);
+            btnNewInquiries.textContent = `NEW (${newInquiries.length})`;
+            newInquiryDateNote.textContent = newInquiryLastReportDate
+                ? 'Showing inquiries after ' + newInquiryLastReportDate + ' through today (' + newInquiries.length + ' found).'
+                : 'Showing inquiries from the last 35 days. Enter a previous report date to extend the range.';
+        }
+        refreshNewInquiryDateFilter();
 
-        let copyTextNewInquiries = renderInquiryBureauGroups(newInquiriesView, newBureauGroups, "No recent inquiries", crcCopyConnectedNew, openInquiryAliasDialog, crcNewInquiryDisplayMode);
-
-        btnNewInquiries.textContent = `NEW (${newInquiries.length})`;
+        newInquiryDateApply.addEventListener('click', () => {
+            const selected = newInquiryDateInput.value;
+            const m = selected.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            const parsed = m ? new Date(+m[1], +m[2] - 1, +m[3]) : null;
+            if (!parsed || parsed.getFullYear() !== +m[1] || parsed.getMonth() !== +m[2] - 1 ||
+                parsed.getDate() !== +m[3] || parsed > new Date()) {
+                newInquiryDateNote.textContent = 'Choose a valid previous report date that is not in the future.';
+                return;
+            }
+            newInquiryLastReportDate = selected;
+            refreshNewInquiryDateFilter();
+        });
+        newInquiryDateClear.addEventListener('click', () => {
+            newInquiryLastReportDate = '';
+            newInquiryDateInput.value = '';
+            refreshNewInquiryDateFilter();
+        });
 
         // ========================================
         // OPEN ACCOUNTS VIEW + DEDICATED COPY BUTTON
@@ -5736,6 +5807,7 @@ function extractInquiries() {
                     bankruptcies,
                     inquiries,
                     newInquiries,
+                    newInquiryLastReportDate,
                     openAccounts,
                     openAccountsByBureau,
                     previousAddresses,
