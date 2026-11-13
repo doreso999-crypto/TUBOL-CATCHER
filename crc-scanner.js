@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.12
+// @version      5.13
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.12';
+    const TUBOL_CATCHER_VERSION = '5.13';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -4796,8 +4796,153 @@ function extractInquiries() {
         };
     }
 
+
+    // TUBOL HISTORY DATABASE — isolated local-only reporting module.
+    const TUBOL_HISTORY_DB = 'tubol-catcher-history';
+    const TUBOL_HISTORY_STORE = 'snapshots';
+
+    function openTubolHistoryDb() {
+        return new Promise((resolve, reject) => {
+            if (!window.indexedDB) return reject(new Error('IndexedDB is unavailable.'));
+            const request = indexedDB.open(TUBOL_HISTORY_DB, 1);
+            request.onupgradeneeded = () => {
+                const db = request.result;
+                if (!db.objectStoreNames.contains(TUBOL_HISTORY_STORE)) {
+                    const store = db.createObjectStore(TUBOL_HISTORY_STORE, { keyPath: 'id', autoIncrement: true });
+                    store.createIndex('clientKey', 'clientKey', { unique: false });
+                }
+            };
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error || new Error('Could not open local history.'));
+        });
+    }
+
+    function tubolHistoryIdentity(name) {
+        const clean = String(name || '').replace(/\s+/g, ' ').trim();
+        const id = (String(location.pathname).match(/\/clients\/([^/?#]+)/i) || [])[1] || '';
+        return { clientName: clean, clientKey: (id ? id + '|' : '') + clean.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim() };
+    }
+
+    function tubolHistoryField(item, code, labels) {
+        const fields = item && item.bureau_fields && item.bureau_fields[code];
+        if (!fields) return '';
+        for (const [label, value] of Object.entries(fields)) {
+            if (labels.some(x => x.toLowerCase() === String(label).toLowerCase()) && String(value || '').trim()) return String(value).trim();
+        }
+        return '';
+    }
+
+    function tubolBuildHistorySnapshot(name, negativeData, bankruptcyTables, inquiries) {
+        const identity = tubolHistoryIdentity(name);
+        const bureaus = [{code:'EX',field:'experian',name:'Experian'},{code:'EQU',field:'equifax',name:'Equifax'},{code:'TU',field:'transunion',name:'TransUnion'}];
+        const negativeRecords = [];
+        (negativeData || []).forEach(item => bureaus.forEach(b => {
+            const fields = item.bureau_fields && item.bureau_fields[b.code];
+            const shown = String(item.bureau_display || '').toUpperCase();
+            const hasFields = fields && Object.values(fields).some(v => String(v || '').trim() && !['-','--'].includes(String(v).trim()));
+            if (!hasFields && !(b.code === 'EX' ? shown.includes('EX') : b.code === 'EQU' ? shown.includes('EQU') : shown.includes('TU'))) return;
+            const creditor = String(item.account || '(No creditor)').trim();
+            const accountNumber = tubolHistoryField(item,b.code,['Account #','Account Number','Account No']);
+            const type = String(item.account_type || 'Unclassified');
+            const identityPart = accountNumber ? 'acct:' + accountNumber.toUpperCase().replace(/[^A-Z0-9]/g,'') : 'name:' + creditor.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim() + ':' + type.toLowerCase();
+            negativeRecords.push({key:b.code+'|'+identityPart+'|'+creditor.toLowerCase(),kind:'Negative account',bureau:b.name,creditor,accountNumber,accountType:type,balance:tubolHistoryField(item,b.code,['Balance','Balance Owed']) || item.balance || ''});
+        }));
+        (bankruptcyTables || []).forEach(item => bureaus.forEach(b => {
+            const fields = item.bureau_fields && item.bureau_fields[b.code];
+            if (!fields || !Object.keys(fields).length) return;
+            const ref = tubolHistoryField(item,b.code,['Reference','Reference #']);
+            negativeRecords.push({key:b.code+'|bankruptcy|'+(ref || 'public-record'),kind:'Bankruptcy',bureau:b.name,creditor:'Bankruptcy',accountNumber:ref,accountType:'Bankruptcy'});
+        }));
+        const inquiryRecords = (inquiries || []).map(item => {
+            const code = item.bureauKey === 'experian' ? 'EX' : item.bureauKey === 'equifax' ? 'EQU' : 'TU';
+            const creditor = String(item.creditor || '(No creditor)').trim(), date = String(item.date || '').trim();
+            return {key:code+'|inquiry|'+creditor.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()+'|'+date,bureau:code === 'EX' ? 'Experian' : code === 'EQU' ? 'Equifax' : 'TransUnion',creditor,date};
+        });
+        return {...identity,scannedAt:new Date().toISOString(),negativeRecords,inquiryRecords};
+    }
+
+    function tubolCompareHistory(previous, current) {
+        const compare = (oldItems,newItems) => {
+            const oldMap = new Map((oldItems || []).map(x => [x.key,x]));
+            const newMap = new Map((newItems || []).map(x => [x.key,x]));
+            return {disappeared:[...oldMap].filter(([k])=>!newMap.has(k)).map(([,v])=>v),added:[...newMap].filter(([k])=>!oldMap.has(k)).map(([,v])=>v)};
+        };
+        return {firstScan:!previous,previousScanAt:previous ? previous.scannedAt : '',negative:compare(previous && previous.negativeRecords,current.negativeRecords),inquiries:compare(previous && previous.inquiryRecords,current.inquiryRecords)};
+    }
+
+    async function tubolSaveHistorySnapshot(snapshot) {
+        if (!snapshot.clientName) return {skipped:true,reason:'Client name could not be identified; report was not saved.'};
+        const db = await openTubolHistoryDb();
+        try {
+            const previous = await new Promise((resolve,reject) => {
+                const tx = db.transaction(TUBOL_HISTORY_STORE,'readonly');
+                const req = tx.objectStore(TUBOL_HISTORY_STORE).index('clientKey').getAll(snapshot.clientKey);
+                req.onsuccess = () => { const rows=(req.result||[]).sort((a,b)=>String(b.scannedAt).localeCompare(String(a.scannedAt))); resolve(rows[0]||null); };
+                req.onerror = () => reject(req.error);
+            });
+            const diff = tubolCompareHistory(previous,snapshot);
+            await new Promise((resolve,reject) => {
+                const tx=db.transaction(TUBOL_HISTORY_STORE,'readwrite');
+                tx.objectStore(TUBOL_HISTORY_STORE).add(snapshot);
+                tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error); tx.onabort=()=>reject(tx.error||new Error('Save aborted.'));
+            });
+            return {...diff,saved:true};
+        } finally { db.close(); }
+    }
+
+    function tubolOpenHistoryDashboard(clientName) {
+        const win = window.open('about:blank','_blank');
+        if (!win) { window.alert('Allow pop-ups for Credit Repair Cloud to open the history dashboard.'); return; }
+        const d=win.document; d.open();
+        d.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TUBOL CATCHER — History</title></head><body></body></html>'); d.close();
+        const css=d.createElement('style');
+        css.textContent='*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 10% 0%,#1b3556,transparent 40%),#0b1220;color:#e8eef8;font:14px Inter,Segoe UI,sans-serif}.wrap{max-width:1400px;margin:auto;padding:36px}.eyebrow{color:#7db9ff;letter-spacing:.16em;font-size:11px;font-weight:800}h1{font-size:38px;margin:8px 0}.muted{color:#91a5c0}.toolbar{display:flex;gap:10px;margin:24px 0;flex-wrap:wrap}select,button{background:#172943;color:#edf5ff;border:1px solid #385575;border-radius:9px;padding:11px 14px;font:inherit}button{cursor:pointer}button:hover{background:#23466d}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.stat,.panel{background:linear-gradient(145deg,#17263d,#111c2e);border:1px solid #2a405e;border-radius:15px;padding:18px}.stat{animation:rise .4s both}.stat:nth-child(2){animation-delay:.06s}.stat:nth-child(3){animation-delay:.12s}.stat:nth-child(4){animation-delay:.18s}@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}.stat small{color:#91a5c0}.stat strong{display:block;font-size:31px;margin-top:9px}.columns{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:15px}.panel h2{font-size:17px;margin:0 0 5px}.item{padding:12px 0;border-top:1px solid #2b3b53;display:flex;justify-content:space-between;gap:12px;animation:fade .3s both}@keyframes fade{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}.item b{display:block;overflow-wrap:anywhere}.meta{font-size:11px;color:#92a7c3;margin-top:5px;line-height:1.5}.tag{font-size:10px;font-weight:800;border-radius:20px;padding:5px 8px;height:max-content;white-space:nowrap}.gone{background:#492631;color:#ffb8c4}.new{background:#164638;color:#9aebcb}.empty{color:#8ca1bd;padding:18px 0}.timeline{margin-top:15px}.scan{padding:12px 0;border-top:1px solid #2b3b53}.notice{font-size:11px;color:#8297b2;line-height:1.6;margin-top:20px}@media(max-width:850px){.stats{grid-template-columns:repeat(2,1fr)}.columns{grid-template-columns:1fr}}@media(max-width:520px){.wrap{padding:18px}.stat strong{font-size:24px}}';
+        d.head.appendChild(css);
+        const root=d.createElement('main'); root.className='wrap';
+        root.innerHTML='<div class="eyebrow">TUBOL CATCHER / LOCAL INTELLIGENCE</div><h1>Report History</h1><div class="muted">Changes between saved client credit-report scans · Stored on this browser only</div><div class="toolbar"><select id="client"></select><button id="refresh">Refresh</button><button id="export">Export client history</button></div><section class="stats"><div class="stat"><small>Saved scans</small><strong id="scans">0</strong></div><div class="stat"><small>Negative items no longer reported</small><strong id="neg">—</strong></div><div class="stat"><small>Inquiries no longer reported</small><strong id="inq">—</strong></div><div class="stat"><small>Newly reported items</small><strong id="added">—</strong></div></section><section class="columns"><article class="panel"><h2>Negative items no longer reported</h2><p class="muted">Compared with the previous scan, by bureau.</p><div id="goneNeg" class="empty">Loading…</div></article><article class="panel"><h2>Inquiries no longer reported</h2><p class="muted">Matched by creditor, date, and bureau.</p><div id="goneInq" class="empty">Loading…</div></article><article class="panel"><h2>Newly reported items</h2><p class="muted">Items found in the latest scan only.</p><div id="addedItems" class="empty">Loading…</div></article><article class="panel"><h2>Latest scan inventory</h2><p class="muted">Account numbers are retained separately for each bureau.</p><div id="inventory" class="empty">Loading…</div></article></section><article class="panel timeline"><h2>Scan timeline</h2><div id="timeline" class="empty">Loading…</div></article><p class="notice">A missing item is labelled “no longer reported”; this does not independently prove a legal deletion. Full account numbers are stored locally in this browser profile and are not uploaded. Use a private browser profile on shared devices.</p>';
+        d.body.appendChild(root);
+        const el=id=>d.getElementById(id), esc=s=>String(s==null?'':s);
+        let rows=[],selected='';
+        const list=async()=>{const db=await openTubolHistoryDb();try{return await new Promise((res,rej)=>{const q=db.transaction(TUBOL_HISTORY_STORE,'readonly').objectStore(TUBOL_HISTORY_STORE).getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error);});}finally{db.close();}};
+        const renderItems=(id,items,tag)=>{const box=el(id);box.replaceChildren();if(!items.length){box.className='empty';box.textContent='No changes detected.';return;}box.className='';items.forEach((x,i)=>{const row=d.createElement('div');row.className='item';row.style.animationDelay=Math.min(i*30,300)+'ms';const left=d.createElement('div'),b=d.createElement('b'),meta=d.createElement('div');b.textContent=x.creditor||'(No creditor)';meta.className='meta';meta.textContent=[x.bureau,x.accountNumber?'Account: '+x.accountNumber:'',x.accountType||'',x.balance?'Balance: '+x.balance:'',x.date?'Date: '+x.date:''].filter(Boolean).join(' · ');left.append(b,meta);const badge=d.createElement('span');badge.className='tag '+(tag==='NEW'?'new':'gone');badge.textContent=tag;row.append(left,badge);box.appendChild(row);});};
+        const render=()=>{const clientRows=rows.filter(x=>x.clientKey===selected).sort((a,b)=>String(a.scannedAt).localeCompare(String(b.scannedAt)));const latest=clientRows.at(-1),prev=clientRows.at(-2),diff=tubolCompareHistory(prev,latest||{negativeRecords:[],inquiryRecords:[]});el('scans').textContent=clientRows.length;el('neg').textContent=prev?diff.negative.disappeared.length:'—';el('inq').textContent=prev?diff.inquiries.disappeared.length:'—';el('added').textContent=prev?diff.negative.added.length+diff.inquiries.added.length:'—';renderItems('goneNeg',prev?diff.negative.disappeared:[],'NO LONGER REPORTED');renderItems('goneInq',prev?diff.inquiries.disappeared:[],'NO LONGER REPORTED');renderItems('addedItems',prev?diff.negative.added.concat(diff.inquiries.added):[],'NEW');renderItems('inventory',latest?latest.negativeRecords:[],'SAVED');const t=el('timeline');t.replaceChildren();if(!clientRows.length){t.className='empty';t.textContent='No saved scans for this client.';}else{t.className='';clientRows.slice().reverse().forEach((x,i)=>{const p=d.createElement('div');p.className='scan';p.textContent=new Date(x.scannedAt).toLocaleString()+' — '+x.negativeRecords.length+' negative bureau records · '+x.inquiryRecords.length+' inquiries'+(i===0?' · LATEST':'');t.appendChild(p);});}};
+        const refresh=async()=>{try{rows=await list();const clients=new Map();rows.forEach(x=>clients.set(x.clientKey,x.clientName));const select=el('client');select.replaceChildren();[...clients].sort((a,b)=>a[1].localeCompare(b[1])).forEach(([k,n])=>{const o=d.createElement('option');o.value=k;o.textContent=n;select.appendChild(o);});const wanted=tubolHistoryIdentity(clientName).clientKey;if(clients.has(wanted))selected=wanted;if(!selected||!clients.has(selected))selected=select.options[0]?.value||'';select.value=selected;render();}catch(e){el('timeline').textContent='History database error: '+e.message;}};
+        el('client').addEventListener('change',()=>{selected=el('client').value;render();});el('refresh').addEventListener('click',refresh);
+        el('export').addEventListener('click',()=>{const data=rows.filter(x=>x.clientKey===selected);if(!data.length)return;const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=d.createElement('a');a.href=url;a.download='tubol-client-history.json';a.click();URL.revokeObjectURL(url);});
+        refresh();
+    }
+
+    function tubolInstallHistoryNotice(panel, clientName, diff) {
+        if (panel.querySelector('#tubol-history-notice')) return;
+        if (!document.getElementById('tubol-history-notice-css')) {
+            const style=document.createElement('style');style.id='tubol-history-notice-css';
+            style.textContent='#tubol-history-notice{margin:8px 12px 0;padding:10px 12px;border:1px solid #31527c;border-radius:10px;background:linear-gradient(110deg,#142b46,#172033);color:#eaf3ff;display:flex;align-items:center;justify-content:space-between;gap:9px;animation:tubolNoticeIn .35s ease both}#tubol-history-notice .copy{font:600 12px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-width:0}#tubol-history-notice small{display:block;color:#a8bfdc;font-weight:500}#tubol-history-notice button{border:1px solid #4775aa;border-radius:8px;background:#24558c;color:#fff;padding:8px 10px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap}#tubol-history-notice.alert{border-color:#4b9a83;box-shadow:0 0 18px #38c99a18}#tubol-history-notice .pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:#5de0b1;margin-right:7px;animation:tubolPulse 1.6s infinite}@keyframes tubolNoticeIn{from{opacity:0;transform:translateY(-7px)}to{opacity:1;transform:none}}@keyframes tubolPulse{70%{box-shadow:0 0 0 7px #5de0b100}100%{box-shadow:0 0 0 0 #5de0b100}}';
+            document.head.appendChild(style);
+        }
+        const banner=document.createElement('div');banner.id='tubol-history-notice';
+        const copy=document.createElement('div');copy.className='copy';const title=document.createElement('div'),detail=document.createElement('small');
+        if(diff&&diff.saved){
+            if(diff.firstScan){title.textContent='History baseline saved';detail.textContent='Next scan will be compared for '+clientName+'.';}
+            else{banner.classList.add('alert');const removed=diff.negative.disappeared.length+diff.inquiries.disappeared.length,added=diff.negative.added.length+diff.inquiries.added.length;const dot=document.createElement('span');dot.className='pulse';title.append(dot,document.createTextNode(removed+' no longer reported · '+added+' newly reported'));detail.textContent='Compared with '+new Date(diff.previousScanAt).toLocaleDateString()+' · '+clientName;}
+        }else{title.textContent='Report history unavailable';detail.textContent=diff&&diff.reason?diff.reason:'Local history could not be saved.';}
+        copy.append(title,detail);const button=document.createElement('button');button.textContent='OPEN DASHBOARD';button.addEventListener('click',()=>tubolOpenHistoryDashboard(clientName));banner.append(copy,button);
+        const top=panel.querySelector('#crc-top-bar');if(top&&top.parentNode)top.parentNode.insertBefore(banner,top.nextSibling);else panel.insertBefore(banner,panel.firstChild);
+    }
+
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
+        // Store a local report snapshot asynchronously; extraction remains unchanged.
+        const historyClientName = getCurrentClientName();
+        const historySnapshot = tubolBuildHistorySnapshot(historyClientName, negativeData, bankruptcyTables, inquiries);
+        tubolSaveHistorySnapshot(historySnapshot).then(diff => {
+            const currentPanel = document.getElementById('crc-negative-panel');
+            if (currentPanel) tubolInstallHistoryNotice(currentPanel, historyClientName || 'this client', diff);
+        }).catch(error => {
+            console.warn('TUBOL-CATCHER local history could not be saved:', error);
+            const currentPanel = document.getElementById('crc-negative-panel');
+            if (currentPanel) tubolInstallHistoryNotice(currentPanel, historyClientName || 'this client', {saved:false,reason:error.message});
+        });
+
         const bankruptcyTables = extractBankruptcyTables();
         let openAccountsData = extractOpenAccounts();
         let openAccounts = openAccountsData.list;
