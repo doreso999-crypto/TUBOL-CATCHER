@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.18
+// @version      5.19
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.17';
+    const TUBOL_CATCHER_VERSION = '5.19';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -2016,6 +2016,8 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
                 <div class="crc-settings-section-title">Report history</div>
                 <div class="crc-settings-note">See what changed between this client's saved reports.</div>
                 <button type="button" id="tubol-open-history-settings" class="crc-history-settings-button">View report history</button>
+                <button type="button" id="tubol-choose-history-folder" class="crc-history-settings-button">Choose local history folder</button>
+                <div class="crc-settings-note">Scans are mirrored to a JSON file on your computer. If browser data is cleared, choose the same folder again to restore the file.</div>
                 </div>
                 <div id="crc-settings-aliases" role="tabpanel" hidden>
                     <div class="crc-settings-note">Search and expand creditors. Right-click a name variation to remove it. Right-click an inquiry or open account to assign its name. Add a new creditor when none match.</div>
@@ -4833,21 +4835,130 @@ function extractInquiries() {
     // TUBOL HISTORY DATABASE — isolated local-only reporting module.
     const TUBOL_HISTORY_DB = 'tubol-catcher-history';
     const TUBOL_HISTORY_STORE = 'snapshots';
+    const TUBOL_HISTORY_SETTINGS_STORE = 'settings';
+    const TUBOL_HISTORY_DIRECTORY_KEY = 'history-directory';
+    let tubolHistoryDirectoryHandle = null;
 
     function openTubolHistoryDb() {
         return new Promise((resolve, reject) => {
             if (!window.indexedDB) return reject(new Error('IndexedDB is unavailable.'));
-            const request = indexedDB.open(TUBOL_HISTORY_DB, 1);
+            const request = indexedDB.open(TUBOL_HISTORY_DB, 2);
             request.onupgradeneeded = () => {
                 const db = request.result;
                 if (!db.objectStoreNames.contains(TUBOL_HISTORY_STORE)) {
                     const store = db.createObjectStore(TUBOL_HISTORY_STORE, { keyPath: 'id', autoIncrement: true });
                     store.createIndex('clientKey', 'clientKey', { unique: false });
                 }
+                if (!db.objectStoreNames.contains(TUBOL_HISTORY_SETTINGS_STORE))
+                    db.createObjectStore(TUBOL_HISTORY_SETTINGS_STORE);
             };
             request.onsuccess = () => resolve(request.result);
             request.onerror = () => reject(request.error || new Error('Could not open local history.'));
         });
+    }
+
+    async function tubolGetHistoryDirectoryHandle() {
+        if (tubolHistoryDirectoryHandle) return tubolHistoryDirectoryHandle;
+        const db = await openTubolHistoryDb();
+        try {
+            tubolHistoryDirectoryHandle = await new Promise((resolve,reject) => {
+                const req = db.transaction(TUBOL_HISTORY_SETTINGS_STORE,'readonly')
+                    .objectStore(TUBOL_HISTORY_SETTINGS_STORE).get(TUBOL_HISTORY_DIRECTORY_KEY);
+                req.onsuccess = () => resolve(req.result || null);
+                req.onerror = () => reject(req.error);
+            });
+            return tubolHistoryDirectoryHandle;
+        } finally { db.close(); }
+    }
+
+    async function tubolStoreHistoryDirectoryHandle(handle) {
+        const db = await openTubolHistoryDb();
+        try {
+            await new Promise((resolve,reject) => {
+                const tx = db.transaction(TUBOL_HISTORY_SETTINGS_STORE,'readwrite');
+                tx.objectStore(TUBOL_HISTORY_SETTINGS_STORE).put(handle,TUBOL_HISTORY_DIRECTORY_KEY);
+                tx.oncomplete = resolve; tx.onerror = () => reject(tx.error);
+            });
+            tubolHistoryDirectoryHandle = handle;
+        } finally { db.close(); }
+    }
+
+    async function tubolReadHistoryFile(handle) {
+        const fileHandle = await handle.getFileHandle('tubol-catcher-report-history.json',{create:true});
+        const file = await fileHandle.getFile();
+        if (!file.size) return [];
+        const parsed = JSON.parse(await file.text());
+        if (Array.isArray(parsed)) return parsed;
+        return Array.isArray(parsed.snapshots) ? parsed.snapshots : [];
+    }
+
+    async function tubolWriteHistoryFile(rows, handle) {
+        const permission = await handle.queryPermission({mode:'readwrite'});
+        if (permission !== 'granted')
+            throw new Error('Local folder permission is not active. Re-select the history folder in Settings to resume file saving.');
+        const fileHandle = await handle.getFileHandle('tubol-catcher-report-history.json',{create:true});
+        const writable = await fileHandle.createWritable();
+        try {
+            await writable.write(JSON.stringify({format:'TUBOL-CATCHER-HISTORY',version:1,updatedAt:new Date().toISOString(),snapshots:rows},null,2));
+            await writable.close();
+        } catch (error) {
+            try { await writable.abort(); } catch (_) {}
+            throw error;
+        }
+    }
+
+    async function tubolGetAllHistoryRows() {
+        const db = await openTubolHistoryDb();
+        try {
+            return await new Promise((resolve,reject) => {
+                const req = db.transaction(TUBOL_HISTORY_STORE,'readonly').objectStore(TUBOL_HISTORY_STORE).getAll();
+                req.onsuccess = () => resolve(req.result || []);
+                req.onerror = () => reject(req.error);
+            });
+        } finally { db.close(); }
+    }
+
+    async function tubolReplaceHistoryRows(rows) {
+        const db = await openTubolHistoryDb();
+        try {
+            await new Promise((resolve,reject) => {
+                const tx = db.transaction(TUBOL_HISTORY_STORE,'readwrite');
+                const store = tx.objectStore(TUBOL_HISTORY_STORE);
+                store.clear();
+                (rows || []).forEach(row => {
+                    const copy = {...row};
+                    delete copy.id;
+                    store.add(copy);
+                });
+                tx.oncomplete = resolve; tx.onerror = () => reject(tx.error); tx.onabort = () => reject(tx.error || new Error('History restore failed.'));
+            });
+        } finally { db.close(); }
+    }
+
+    async function tubolChooseHistoryFolder() {
+        if (typeof window.showDirectoryPicker !== 'function') {
+            window.alert('This browser does not support direct local-folder saving. Use a current version of Microsoft Edge or Chrome.');
+            return;
+        }
+        try {
+            // The picker is invoked directly from the Settings button click.
+            const handle = await window.showDirectoryPicker({mode:'readwrite'});
+            const permission = await handle.requestPermission({mode:'readwrite'});
+            if (permission !== 'granted') throw new Error('Write permission was not granted.');
+            const savedRows = await tubolReadHistoryFile(handle);
+            if (savedRows.length) {
+                const useFile = window.confirm('A history file already exists in this folder. Load it into TUBOL-CATCHER and use it as the saved history? Choose Cancel to keep the browser history and replace the file with that history.');
+                if (useFile) await tubolReplaceHistoryRows(savedRows);
+            }
+            await tubolStoreHistoryDirectoryHandle(handle);
+            const rows = await tubolGetAllHistoryRows();
+            await tubolWriteHistoryFile(rows,handle);
+            window.alert('Local history file connected. New scans will be saved to tubol-catcher-report-history.json in the selected folder.');
+        } catch (error) {
+            if (error && error.name === 'AbortError') return;
+            console.error('TUBOL-CATCHER could not connect the local history folder:',error);
+            window.alert('Could not connect the local history folder: ' + error.message);
+        }
     }
 
     function tubolHistoryIdentity(name) {
@@ -4949,7 +5060,14 @@ function extractInquiries() {
                 sameDay.filter(row => !existing || row.id !== existing.id).forEach(row => store.delete(row.id));
                 tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error); tx.onabort=()=>reject(tx.error||new Error('Save aborted.'));
             });
-            return {...diff,saved:true,overwritten:!!existing};
+            const updatedRows = await tubolGetAllHistoryRows();
+            const directoryHandle = await tubolGetHistoryDirectoryHandle();
+            let fileSaved = false, fileError = '';
+            if (directoryHandle) {
+                try { await tubolWriteHistoryFile(updatedRows,directoryHandle); fileSaved = true; }
+                catch (error) { fileError = error.message || String(error); }
+            }
+            return {...diff,saved:true,overwritten:!!existing,fileSaved,fileError};
         } finally { db.close(); }
     }
 
@@ -5896,6 +6014,7 @@ h2{margin:0;font-size:14px;font-weight:700;letter-spacing:-.1px}
         const settingsMenu = panel.querySelector('#crc-settings-menu');
         const historySettingsButton = panel.querySelector('#tubol-open-history-settings');
         historySettingsButton.addEventListener('click', () => tubolOpenHistoryDashboard(historyClientName || 'this client'));
+        panel.querySelector('#tubol-choose-history-folder').addEventListener('click', tubolChooseHistoryFolder);
         const inquiriesFormatSelect = panel.querySelector('#crc-inquiries-display-mode');
         const newFormatSelect = panel.querySelector('#crc-new-inquiries-display-mode');
         const personalFormatSelect = panel.querySelector('#crc-personal-display-mode');
