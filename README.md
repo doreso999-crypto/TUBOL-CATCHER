@@ -1,3 +1,12 @@
+## Adjustable NEW inquiry date range (v5.12)
+
+The NEW inquiries subtab keeps its default automatic **last 35 days** filter.
+For clients paused longer than 35 days, enter the previous report's date in
+**Last Report Date** and click **Apply**. The NEW list and its copy output then
+include inquiries dated strictly after that date through today. **Auto (35 days)**
+clears the override and restores the default. The selected date is temporary
+for the current scan and is not saved across clients or browser sessions.
+
 # TUBOL-CATCHER
 
 ## Confirmed agency warning and upper-right panel (v5.9)
