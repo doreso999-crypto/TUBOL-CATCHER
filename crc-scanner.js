@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.14
+// @version      5.15
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.14';
+    const TUBOL_CATCHER_VERSION = '5.15';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -365,6 +365,15 @@ const CSS_STYLES = `
     height: 16px;
     margin: 1px 0 0;
     accent-color: #2374e1;
+}
+
+#crc-settings-menu .crc-history-settings-button {
+    display:block; width:100%; margin:5px 0 12px; padding:10px 12px;
+    border:1px solid #55585b; border-radius:8px; background:#303236;
+    color:#f2f3f5; font:inherit; font-weight:650; text-align:left; cursor:pointer;
+}
+#crc-settings-menu .crc-history-settings-button:hover {
+    background:#3a3d42; border-color:#777d85;
 }
 
 #crc-alias-search, #crc-alias-target, #crc-alias-new-name { width: 100%; box-sizing: border-box; background: #18191a; color: #e4e6eb; padding: 9px; border: 1px solid #55585b; border-radius: 8px; margin: 8px 0; }
@@ -2004,9 +2013,9 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
                     <span>Show and copy creditor names only</span>
                 </label>
                 <div class="crc-settings-note">Preferences are saved on this device. Open Accounts still includes every extracted account.</div>
-                <div class="crc-settings-section-title">Private report history</div>
-                <div class="crc-settings-note">Open the local scan-history dashboard from here. No dashboard button or report alert is shown on the main extractor panel.</div>
-                <button type="button" id="tubol-open-history-settings" style="width:100%;margin:4px 0 12px;padding:10px 12px;border:1px solid #4775aa;border-radius:8px;background:#24558c;color:#fff;font-weight:800;cursor:pointer;">Open Report History</button>
+                <div class="crc-settings-section-title">Report history</div>
+                <div class="crc-settings-note">See what changed between this client's saved reports.</div>
+                <button type="button" id="tubol-open-history-settings" class="crc-history-settings-button">View report history</button>
                 </div>
                 <div id="crc-settings-aliases" role="tabpanel" hidden>
                     <div class="crc-settings-note">Search and expand creditors. Right-click a name variation to remove it. Right-click an inquiry or open account to assign its name. Add a new creditor when none match.</div>
@@ -4905,23 +4914,112 @@ function extractInquiries() {
 
     function tubolOpenHistoryDashboard(clientName) {
         const win = window.open('about:blank','_blank');
-        if (!win) { window.alert('Allow pop-ups for Credit Repair Cloud to open the history dashboard.'); return; }
-        const d=win.document; d.open();
-        d.write('<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TUBOL CATCHER — History</title></head><body></body></html>'); d.close();
-        const css=d.createElement('style');
-        css.textContent='*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 10% 0%,#1b3556,transparent 40%),#0b1220;color:#e8eef8;font:14px Inter,Segoe UI,sans-serif}.wrap{max-width:1400px;margin:auto;padding:36px}.eyebrow{color:#7db9ff;letter-spacing:.16em;font-size:11px;font-weight:800}h1{font-size:38px;margin:8px 0}.muted{color:#91a5c0}.toolbar{display:flex;gap:10px;margin:24px 0;flex-wrap:wrap}select,button{background:#172943;color:#edf5ff;border:1px solid #385575;border-radius:9px;padding:11px 14px;font:inherit}button{cursor:pointer}button:hover{background:#23466d}.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}.stat,.panel{background:linear-gradient(145deg,#17263d,#111c2e);border:1px solid #2a405e;border-radius:15px;padding:18px}.stat{animation:rise .4s both}.stat:nth-child(2){animation-delay:.06s}.stat:nth-child(3){animation-delay:.12s}.stat:nth-child(4){animation-delay:.18s}@keyframes rise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}.stat small{color:#91a5c0}.stat strong{display:block;font-size:31px;margin-top:9px}.columns{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:15px}.panel h2{font-size:17px;margin:0 0 5px}.item{padding:12px 0;border-top:1px solid #2b3b53;display:flex;justify-content:space-between;gap:12px;animation:fade .3s both}@keyframes fade{from{opacity:0;transform:translateX(-5px)}to{opacity:1;transform:none}}.item b{display:block;overflow-wrap:anywhere}.meta{font-size:11px;color:#92a7c3;margin-top:5px;line-height:1.5}.tag{font-size:10px;font-weight:800;border-radius:20px;padding:5px 8px;height:max-content;white-space:nowrap}.gone{background:#492631;color:#ffb8c4}.new{background:#164638;color:#9aebcb}.empty{color:#8ca1bd;padding:18px 0}.timeline{margin-top:15px}.scan{padding:12px 0;border-top:1px solid #2b3b53}.notice{font-size:11px;color:#8297b2;line-height:1.6;margin-top:20px}@media(max-width:850px){.stats{grid-template-columns:repeat(2,1fr)}.columns{grid-template-columns:1fr}}@media(max-width:520px){.wrap{padding:18px}.stat strong{font-size:24px}}';
+        if (!win) { window.alert('Please allow pop-ups for Credit Repair Cloud to view report history.'); return; }
+        const d = win.document;
+        d.open();
+        d.write('<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Report history</title></head><body></body></html>');
+        d.close();
+
+        const css = d.createElement('style');
+        css.textContent = '*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#24272b;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}button,select{font:inherit}.page{max-width:1180px;margin:0 auto;padding:30px 28px 48px}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:24px}h1{margin:0;font-size:25px;line-height:1.25;font-weight:700;letter-spacing:-.4px}.subtitle{margin:6px 0 0;color:#6d737c;font-size:13px}.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:0 0 18px}select,.btn{min-height:38px;padding:8px 11px;border:1px solid #d5d9df;border-radius:7px;background:#fff;color:#30343a}select{min-width:220px;max-width:100%}.btn{cursor:pointer;font-weight:600}.btn:hover{background:#f8f9fa;border-color:#aeb5bf}.btn-primary{background:#245fbd;color:#fff;border-color:#245fbd}.btn-primary:hover{background:#1d529f;border-color:#1d529f}.updated{margin-left:auto;color:#7b818a;font-size:12px}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.metric,.card{background:#fff;border:1px solid #e0e3e8;border-radius:9px}.metric{padding:15px 16px;min-height:92px}.metric-label{display:block;color:#69717c;font-size:12px}.metric-value{display:block;margin-top:5px;font-size:25px;line-height:1.2;font-weight:700;color:#252a31;font-variant-numeric:tabular-nums}.metric-value.neutral{color:#858c96}.section-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card{padding:17px 18px;min-width:0}.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:3px}h2{margin:0;font-size:15px;font-weight:700}.card-help{margin:3px 0 12px;color:#7b828c;font-size:12px}.entry{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #edf0f3}.entry-main{min-width:0}.entry-name{display:block;color:#292e35;font-weight:650;overflow-wrap:anywhere}.entry-meta{margin-top:3px;color:#737b86;font-size:12px;line-height:1.45;overflow-wrap:anywhere}.pill{flex:0 0 auto;border-radius:5px;padding:3px 7px;background:#edf3fc;color:#315f9d;font-size:10px;font-weight:700}.pill.removed{background:#f1f2f4;color:#5d6570}.empty{padding:15px 0 5px;color:#777f89;font-size:13px}.timeline{margin-top:14px}.scan-row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-top:1px solid #edf0f3}.scan-date{font-weight:600;color:#343941}.scan-count{color:#737b86;font-size:12px;text-align:right}.footnote{margin:14px 2px 0;color:#858c95;font-size:11px;line-height:1.5}.error{color:#9a3434}@media(max-width:760px){.page{padding:22px 16px 36px}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.section-grid{grid-template-columns:1fr}.top{display:block}.updated{width:100%;margin:3px 0 0}}@media(max-width:420px){.metric{padding:12px}.metric-value{font-size:22px}select{min-width:0;flex:1}.toolbar .btn{flex:1}}';
         d.head.appendChild(css);
-        const root=d.createElement('main'); root.className='wrap';
-        root.innerHTML='<div class="eyebrow">TUBOL CATCHER / LOCAL INTELLIGENCE</div><h1>Report History</h1><div class="muted">Changes between saved client credit-report scans · Stored on this browser only</div><div class="toolbar"><select id="client"></select><button id="refresh">Refresh</button><button id="export">Export client history</button></div><section class="stats"><div class="stat"><small>Saved scans</small><strong id="scans">0</strong></div><div class="stat"><small>Negative items no longer reported</small><strong id="neg">—</strong></div><div class="stat"><small>Inquiries no longer reported</small><strong id="inq">—</strong></div><div class="stat"><small>Newly reported items</small><strong id="added">—</strong></div></section><section class="columns"><article class="panel"><h2>Negative items no longer reported</h2><p class="muted">Compared with the previous scan, by bureau.</p><div id="goneNeg" class="empty">Loading…</div></article><article class="panel"><h2>Inquiries no longer reported</h2><p class="muted">Matched by creditor, date, and bureau.</p><div id="goneInq" class="empty">Loading…</div></article><article class="panel"><h2>Newly reported items</h2><p class="muted">Items found in the latest scan only.</p><div id="addedItems" class="empty">Loading…</div></article><article class="panel"><h2>Latest scan inventory</h2><p class="muted">Account numbers are retained separately for each bureau.</p><div id="inventory" class="empty">Loading…</div></article></section><article class="panel timeline"><h2>Scan timeline</h2><div id="timeline" class="empty">Loading…</div></article><p class="notice">A missing item is labelled “no longer reported”; this does not independently prove a legal deletion. Full account numbers are stored locally in this browser profile and are not uploaded. Use a private browser profile on shared devices.</p>';
+
+        const root = d.createElement('main');
+        root.className = 'page';
+        root.innerHTML = '<header class="top"><div><h1>Report history</h1><p class="subtitle">Review changes between this client\'s saved credit reports.</p></div></header><div class="toolbar"><select id="client" aria-label="Choose client"></select><button class="btn" id="refresh" type="button">Refresh</button><button class="btn btn-primary" id="export" type="button">Export history</button><span class="updated" id="updated"></span></div><section class="summary" aria-label="Report summary"><div class="metric"><span class="metric-label">Reports saved</span><strong class="metric-value" id="scans">0</strong></div><div class="metric"><span class="metric-label">Accounts not on latest report</span><strong class="metric-value neutral" id="neg">—</strong></div><div class="metric"><span class="metric-label">Inquiries not on latest report</span><strong class="metric-value neutral" id="inq">—</strong></div><div class="metric"><span class="metric-label">New items on latest report</span><strong class="metric-value neutral" id="added">—</strong></div></section><section class="section-grid"><article class="card"><div class="card-head"><h2>Accounts no longer listed</h2></div><p class="card-help">Accounts found on the previous report but not the latest one.</p><div id="goneNeg" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Inquiries no longer listed</h2></div><p class="card-help">Inquiries found previously but missing from the latest report.</p><div id="goneInq" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>New items</h2></div><p class="card-help">Accounts and inquiries that appear on the latest report only.</p><div id="addedItems" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Accounts on latest report</h2></div><p class="card-help">Negative accounts saved from the most recent scan.</p><div id="inventory" class="empty">Loading reports…</div></article></section><section class="card timeline"><h2>Previous scans</h2><p class="card-help">Most recent scan first.</p><div id="timeline" class="empty">Loading reports…</div></section><p class="footnote">A missing item means it was not found in the latest scan. It does not by itself confirm that the bureau or creditor deleted it. Report history is saved in this browser only.</p>';
         d.body.appendChild(root);
-        const el=id=>d.getElementById(id), esc=s=>String(s==null?'':s);
-        let rows=[],selected='';
-        const list=async()=>{const db=await openTubolHistoryDb();try{return await new Promise((res,rej)=>{const q=db.transaction(TUBOL_HISTORY_STORE,'readonly').objectStore(TUBOL_HISTORY_STORE).getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error);});}finally{db.close();}};
-        const renderItems=(id,items,tag)=>{const box=el(id);box.replaceChildren();if(!items.length){box.className='empty';box.textContent='No changes detected.';return;}box.className='';items.forEach((x,i)=>{const row=d.createElement('div');row.className='item';row.style.animationDelay=Math.min(i*30,300)+'ms';const left=d.createElement('div'),b=d.createElement('b'),meta=d.createElement('div');b.textContent=x.creditor||'(No creditor)';meta.className='meta';meta.textContent=[x.bureau,x.allBureauAccountNumbers?'Reported account numbers — '+x.allBureauAccountNumbers:(x.accountNumber?'Account: '+x.accountNumber:''),x.accountType||'',x.balance?'Balance: '+x.balance:'',x.date?'Date: '+x.date:''].filter(Boolean).join(' · ');left.append(b,meta);const badge=d.createElement('span');badge.className='tag '+(tag==='NEW'?'new':'gone');badge.textContent=tag;row.append(left,badge);box.appendChild(row);});};
-        const render=()=>{const clientRows=rows.filter(x=>x.clientKey===selected).sort((a,b)=>String(a.scannedAt).localeCompare(String(b.scannedAt)));const latest=clientRows.at(-1),prev=clientRows.at(-2),diff=tubolCompareHistory(prev,latest||{negativeRecords:[],inquiryRecords:[]});el('scans').textContent=clientRows.length;el('neg').textContent=prev?diff.negative.disappeared.length:'—';el('inq').textContent=prev?diff.inquiries.disappeared.length:'—';el('added').textContent=prev?diff.negative.added.length+diff.inquiries.added.length:'—';renderItems('goneNeg',prev?diff.negative.disappeared:[],'NO LONGER REPORTED');renderItems('goneInq',prev?diff.inquiries.disappeared:[],'NO LONGER REPORTED');renderItems('addedItems',prev?diff.negative.added.concat(diff.inquiries.added):[],'NEW');renderItems('inventory',latest?latest.negativeRecords:[],'SAVED');const t=el('timeline');t.replaceChildren();if(!clientRows.length){t.className='empty';t.textContent='No saved scans for this client.';}else{t.className='';clientRows.slice().reverse().forEach((x,i)=>{const p=d.createElement('div');p.className='scan';p.textContent=new Date(x.scannedAt).toLocaleString()+' — '+x.negativeRecords.length+' negative bureau records · '+x.inquiryRecords.length+' inquiries'+(i===0?' · LATEST':'');t.appendChild(p);});}};
-        const refresh=async()=>{try{rows=await list();const clients=new Map();rows.forEach(x=>clients.set(x.clientKey,x.clientName));const select=el('client');select.replaceChildren();[...clients].sort((a,b)=>a[1].localeCompare(b[1])).forEach(([k,n])=>{const o=d.createElement('option');o.value=k;o.textContent=n;select.appendChild(o);});const wanted=tubolHistoryIdentity(clientName).clientKey;if(clients.has(wanted))selected=wanted;if(!selected||!clients.has(selected))selected=select.options[0]?.value||'';select.value=selected;render();}catch(e){el('timeline').textContent='History database error: '+e.message;}};
-        el('client').addEventListener('change',()=>{selected=el('client').value;render();});el('refresh').addEventListener('click',refresh);
-        el('export').addEventListener('click',()=>{const data=rows.filter(x=>x.clientKey===selected);if(!data.length)return;const url=URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));const a=d.createElement('a');a.href=url;a.download='tubol-client-history.json';a.click();URL.revokeObjectURL(url);});
+
+        const el = id => d.getElementById(id);
+        let rows = [], selected = '';
+        const list = async () => {
+            const db = await openTubolHistoryDb();
+            try {
+                return await new Promise((resolve,reject) => {
+                    const req = db.transaction(TUBOL_HISTORY_STORE,'readonly').objectStore(TUBOL_HISTORY_STORE).getAll();
+                    req.onsuccess = () => resolve(req.result || []);
+                    req.onerror = () => reject(req.error);
+                });
+            } finally { db.close(); }
+        };
+        const showItems = (id,items,type) => {
+            const box = el(id);
+            box.replaceChildren();
+            if (!items.length) {
+                box.className = 'empty';
+                box.textContent = type === 'removed' ? 'No items missing from the latest report.' :
+                    type === 'new' ? 'No new items since the previous report.' : 'No negative accounts were saved in this scan.';
+                return;
+            }
+            box.className = '';
+            items.forEach(item => {
+                const row = d.createElement('div'); row.className = 'entry';
+                const main = d.createElement('div'); main.className = 'entry-main';
+                const name = d.createElement('span'); name.className = 'entry-name'; name.textContent = item.creditor || '(Creditor not listed)';
+                const meta = d.createElement('div'); meta.className = 'entry-meta';
+                meta.textContent = [item.bureau,item.allBureauAccountNumbers ? 'Account numbers: ' + item.allBureauAccountNumbers : (item.accountNumber ? 'Account: ' + item.accountNumber : ''),item.accountType || '',item.balance ? 'Balance: ' + item.balance : '',item.date ? 'Date: ' + item.date : ''].filter(Boolean).join(' · ');
+                main.append(name,meta);
+                const tag = d.createElement('span'); tag.className = 'pill' + (type === 'removed' ? ' removed' : '');
+                tag.textContent = type === 'new' ? 'NEW' : type === 'saved' ? 'SAVED' : 'NOT LISTED';
+                row.append(main,tag); box.appendChild(row);
+            });
+        };
+        const render = () => {
+            const clientRows = rows.filter(x => x.clientKey === selected).sort((a,b) => String(a.scannedAt).localeCompare(String(b.scannedAt)));
+            const latest = clientRows.at(-1), previous = clientRows.at(-2);
+            const diff = tubolCompareHistory(previous,latest || {negativeRecords:[],inquiryRecords:[]});
+            el('scans').textContent = clientRows.length;
+            el('neg').textContent = previous ? diff.negative.disappeared.length : '—';
+            el('inq').textContent = previous ? diff.inquiries.disappeared.length : '—';
+            el('added').textContent = previous ? diff.negative.added.length + diff.inquiries.added.length : '—';
+            ['neg','inq','added'].forEach(id => el(id).classList.toggle('neutral',!previous));
+            el('updated').textContent = latest ? 'Latest scan: ' + new Date(latest.scannedAt).toLocaleString() : '';
+            showItems('goneNeg',previous ? diff.negative.disappeared : [],'removed');
+            showItems('goneInq',previous ? diff.inquiries.disappeared : [],'removed');
+            showItems('addedItems',previous ? diff.negative.added.concat(diff.inquiries.added) : [],'new');
+            showItems('inventory',latest ? latest.negativeRecords : [],'saved');
+            const timeline = el('timeline'); timeline.replaceChildren();
+            if (!clientRows.length) {
+                timeline.className = 'empty';
+                timeline.textContent = 'No reports have been saved for this client yet. Run a scan to start tracking changes.';
+            } else {
+                timeline.className = '';
+                clientRows.slice().reverse().forEach((scan,index) => {
+                    const row = d.createElement('div'); row.className = 'scan-row';
+                    const date = d.createElement('span'); date.className = 'scan-date'; date.textContent = new Date(scan.scannedAt).toLocaleString();
+                    const count = d.createElement('span'); count.className = 'scan-count';
+                    count.textContent = scan.negativeRecords.length + ' negative account records · ' + scan.inquiryRecords.length + ' inquiries' + (index === 0 ? ' · Latest' : '');
+                    row.append(date,count); timeline.appendChild(row);
+                });
+            }
+        };
+        const refresh = async () => {
+            try {
+                rows = await list();
+                const clients = new Map(); rows.forEach(row => clients.set(row.clientKey,row.clientName));
+                const select = el('client'); select.replaceChildren();
+                [...clients].sort((a,b) => a[1].localeCompare(b[1])).forEach(([key,name]) => {
+                    const option = d.createElement('option'); option.value = key; option.textContent = name; select.appendChild(option);
+                });
+                const wanted = tubolHistoryIdentity(clientName).clientKey;
+                if (clients.has(wanted)) selected = wanted;
+                if (!selected || !clients.has(selected)) selected = select.options[0]?.value || '';
+                select.value = selected;
+                el('export').disabled = !selected;
+                render();
+            } catch (error) {
+                el('timeline').className = 'empty error';
+                el('timeline').textContent = 'Could not load report history: ' + error.message;
+            }
+        };
+        el('client').addEventListener('change',() => { selected = el('client').value; render(); });
+        el('refresh').addEventListener('click',refresh);
+        el('export').addEventListener('click',() => {
+            const data = rows.filter(row => row.clientKey === selected);
+            if (!data.length) return;
+            const url = URL.createObjectURL(new Blob([JSON.stringify(data,null,2)],{type:'application/json'}));
+            const link = d.createElement('a'); link.href = url; link.download = 'client-report-history.json'; link.click();
+            URL.revokeObjectURL(url);
+        });
         refresh();
     }
 
