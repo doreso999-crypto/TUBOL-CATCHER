@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.17
+// @version      5.18
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -4747,6 +4747,27 @@ function extractInquiries() {
         return '';
     }
 
+    // Read the report date from the CREDIT REPORT DATE row in the report itself.
+    function getClientReportDate(reportDocument = document, reportWindow = window) {
+        const contexts = getClientReportContexts(reportDocument, reportWindow);
+        for (const doc of contexts.documents) {
+            const labels = doc.querySelectorAll('p,span,div');
+            for (const label of labels) {
+                if (String(label.textContent || '').replace(/\s+/g, ' ').trim().toUpperCase() !== 'CREDIT REPORT DATE:') continue;
+                let node = label;
+                for (let depth = 0; node && depth < 6; depth++, node = node.parentElement) {
+                    const dates = String(node.textContent || '').match(/\b\d{1,2}\/\d{1,2}\/\d{4}\b/g) || [];
+                    if (dates.length) return dates[0];
+                }
+            }
+        }
+        return '';
+    }
+
+    function tubolHistoryNameKey(value) {
+        return String(value || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    }
+
     function setExtractorClientHeading(panel, reportDocument = document, reportWindow = window) {
         const handle = panel.querySelector('#crc-drag-handle');
         if (!handle) return '';
@@ -4880,7 +4901,7 @@ function extractInquiries() {
             const creditor = String(item.creditor || '(No creditor)').trim(), date = String(item.date || '').trim();
             return {key:code+'|inquiry|'+creditor.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim()+'|'+date,bureau:code === 'EX' ? 'Experian' : code === 'EQU' ? 'Equifax' : 'TransUnion',creditor,date};
         });
-        return {...identity,scannedAt:new Date().toISOString(),negativeRecords,inquiryRecords};
+        return {...identity,reportDate:getClientReportDate(),scannedAt:new Date().toISOString(),negativeRecords,inquiryRecords};
     }
 
     function tubolCompareHistory(previous, current) {
@@ -4904,24 +4925,28 @@ function extractInquiries() {
         try {
             const rows = await new Promise((resolve,reject) => {
                 const tx = db.transaction(TUBOL_HISTORY_STORE,'readonly');
-                const req = tx.objectStore(TUBOL_HISTORY_STORE).index('clientKey').getAll(snapshot.clientKey);
+                const req = tx.objectStore(TUBOL_HISTORY_STORE).getAll();
                 req.onsuccess = () => resolve((req.result||[]).sort((a,b)=>String(b.scannedAt).localeCompare(String(a.scannedAt))));
                 req.onerror = () => reject(req.error);
             });
-            // One saved snapshot per client per local calendar date. Re-scanning
-            // today replaces today's snapshot and compares against the prior day.
-            const today = tubolHistoryLocalDate(snapshot.scannedAt);
-            const sameDay = rows.filter(row => tubolHistoryLocalDate(row.scannedAt) === today);
-            const previous = rows.find(row => tubolHistoryLocalDate(row.scannedAt) !== today) || null;
-            const existing = sameDay[0] || null;
+            const nameKey = tubolHistoryNameKey(snapshot.clientName);
+            const matchingReport = snapshot.reportDate
+                ? rows.find(row => tubolHistoryNameKey(row.clientName) === nameKey &&
+                    String(row.reportDate || '').trim() === String(snapshot.reportDate).trim()) || null
+                : null;
+            const sameDay = rows.filter(row => row.clientKey === snapshot.clientKey &&
+                tubolHistoryLocalDate(row.scannedAt) === tubolHistoryLocalDate(snapshot.scannedAt));
+            const existing = matchingReport || sameDay[0] || null;
+            const previous = rows.find(row => row.id !== (existing && existing.id) &&
+                (row.clientKey === snapshot.clientKey ||
+                 tubolHistoryNameKey(row.clientName) === nameKey)) || null;
             const diff = tubolCompareHistory(previous,snapshot);
             await new Promise((resolve,reject) => {
                 const tx=db.transaction(TUBOL_HISTORY_STORE,'readwrite');
                 const store=tx.objectStore(TUBOL_HISTORY_STORE);
-                if (existing) store.put({...snapshot,id:existing.id});
+                if (existing) store.put({...snapshot,id:existing.id,clientKey:existing.clientKey || snapshot.clientKey});
                 else store.add(snapshot);
-                // Clean up any duplicate same-day rows already present.
-                sameDay.slice(1).forEach(row => store.delete(row.id));
+                sameDay.filter(row => !existing || row.id !== existing.id).forEach(row => store.delete(row.id));
                 tx.oncomplete=resolve; tx.onerror=()=>reject(tx.error); tx.onabort=()=>reject(tx.error||new Error('Save aborted.'));
             });
             return {...diff,saved:true,overwritten:!!existing};
