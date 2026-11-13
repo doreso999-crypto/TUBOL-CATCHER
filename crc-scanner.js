@@ -4836,17 +4836,27 @@ function extractInquiries() {
         const identity = tubolHistoryIdentity(name);
         const bureaus = [{code:'EX',field:'experian',name:'Experian'},{code:'EQU',field:'equifax',name:'Equifax'},{code:'TU',field:'transunion',name:'TransUnion'}];
         const negativeRecords = [];
-        (negativeData || []).forEach(item => bureaus.forEach(b => {
-            const fields = item.bureau_fields && item.bureau_fields[b.code];
+        (negativeData || []).forEach(item => {
             const shown = String(item.bureau_display || '').toUpperCase();
-            const hasFields = fields && Object.values(fields).some(v => String(v || '').trim() && !['-','--'].includes(String(v).trim()));
-            if (!hasFields && !(b.code === 'EX' ? shown.includes('EX') : b.code === 'EQU' ? shown.includes('EQU') : shown.includes('TU'))) return;
-            const creditor = String(item.account || '(No creditor)').trim();
-            const accountNumber = tubolHistoryField(item,b.code,['Account #','Account Number','Account No']);
-            const type = String(item.account_type || 'Unclassified');
-            const identityPart = accountNumber ? 'acct:' + accountNumber.toUpperCase().replace(/[^A-Z0-9]/g,'') : 'name:' + creditor.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim() + ':' + type.toLowerCase();
-            negativeRecords.push({key:b.code+'|'+identityPart+'|'+creditor.toLowerCase(),kind:'Negative account',bureau:b.name,creditor,accountNumber,accountType:type,balance:tubolHistoryField(item,b.code,['Balance','Balance Owed']) || item.balance || ''});
-        }));
+            const allBureauAccountNumbers = bureaus.map(b => {
+                const value = tubolHistoryField(item,b.code,['Account #','Account Number','Account No']);
+                return value ? b.code + ': ' + value : '';
+            }).filter(Boolean).join(' · ');
+            bureaus.forEach(b => {
+                // Only compare a bureau where CRC marked this account NEGATIVE.
+                // Still retain account numbers from every bureau on each record.
+                const isNegativeHere = shown.includes('3BR-') ||
+                    (b.code === 'EX' && /EX\s*-/.test(shown)) ||
+                    (b.code === 'EQU' && /EQU\s*-/.test(shown)) ||
+                    (b.code === 'TU' && /TU\s*-/.test(shown));
+                if (!isNegativeHere) return;
+                const creditor = String(item.account || '(No creditor)').trim();
+                const accountNumber = tubolHistoryField(item,b.code,['Account #','Account Number','Account No']);
+                const type = String(item.account_type || 'Unclassified');
+                const identityPart = accountNumber ? 'acct:' + accountNumber.toUpperCase().replace(/[^A-Z0-9]/g,'') : 'name:' + creditor.toLowerCase().replace(/[^a-z0-9]+/g,' ').trim() + ':' + type.toLowerCase();
+                negativeRecords.push({key:b.code+'|'+identityPart+'|'+creditor.toLowerCase(),kind:'Negative account',bureau:b.name,creditor,accountNumber,allBureauAccountNumbers,accountType:type,balance:tubolHistoryField(item,b.code,['Balance','Balance Owed']) || item.balance || ''});
+            });
+        });
         (bankruptcyTables || []).forEach(item => bureaus.forEach(b => {
             const fields = item.bureau_fields && item.bureau_fields[b.code];
             if (!fields || !Object.keys(fields).length) return;
@@ -4904,7 +4914,7 @@ function extractInquiries() {
         const el=id=>d.getElementById(id), esc=s=>String(s==null?'':s);
         let rows=[],selected='';
         const list=async()=>{const db=await openTubolHistoryDb();try{return await new Promise((res,rej)=>{const q=db.transaction(TUBOL_HISTORY_STORE,'readonly').objectStore(TUBOL_HISTORY_STORE).getAll();q.onsuccess=()=>res(q.result||[]);q.onerror=()=>rej(q.error);});}finally{db.close();}};
-        const renderItems=(id,items,tag)=>{const box=el(id);box.replaceChildren();if(!items.length){box.className='empty';box.textContent='No changes detected.';return;}box.className='';items.forEach((x,i)=>{const row=d.createElement('div');row.className='item';row.style.animationDelay=Math.min(i*30,300)+'ms';const left=d.createElement('div'),b=d.createElement('b'),meta=d.createElement('div');b.textContent=x.creditor||'(No creditor)';meta.className='meta';meta.textContent=[x.bureau,x.accountNumber?'Account: '+x.accountNumber:'',x.accountType||'',x.balance?'Balance: '+x.balance:'',x.date?'Date: '+x.date:''].filter(Boolean).join(' · ');left.append(b,meta);const badge=d.createElement('span');badge.className='tag '+(tag==='NEW'?'new':'gone');badge.textContent=tag;row.append(left,badge);box.appendChild(row);});};
+        const renderItems=(id,items,tag)=>{const box=el(id);box.replaceChildren();if(!items.length){box.className='empty';box.textContent='No changes detected.';return;}box.className='';items.forEach((x,i)=>{const row=d.createElement('div');row.className='item';row.style.animationDelay=Math.min(i*30,300)+'ms';const left=d.createElement('div'),b=d.createElement('b'),meta=d.createElement('div');b.textContent=x.creditor||'(No creditor)';meta.className='meta';meta.textContent=[x.bureau,x.allBureauAccountNumbers?'Reported account numbers — '+x.allBureauAccountNumbers:(x.accountNumber?'Account: '+x.accountNumber:''),x.accountType||'',x.balance?'Balance: '+x.balance:'',x.date?'Date: '+x.date:''].filter(Boolean).join(' · ');left.append(b,meta);const badge=d.createElement('span');badge.className='tag '+(tag==='NEW'?'new':'gone');badge.textContent=tag;row.append(left,badge);box.appendChild(row);});};
         const render=()=>{const clientRows=rows.filter(x=>x.clientKey===selected).sort((a,b)=>String(a.scannedAt).localeCompare(String(b.scannedAt)));const latest=clientRows.at(-1),prev=clientRows.at(-2),diff=tubolCompareHistory(prev,latest||{negativeRecords:[],inquiryRecords:[]});el('scans').textContent=clientRows.length;el('neg').textContent=prev?diff.negative.disappeared.length:'—';el('inq').textContent=prev?diff.inquiries.disappeared.length:'—';el('added').textContent=prev?diff.negative.added.length+diff.inquiries.added.length:'—';renderItems('goneNeg',prev?diff.negative.disappeared:[],'NO LONGER REPORTED');renderItems('goneInq',prev?diff.inquiries.disappeared:[],'NO LONGER REPORTED');renderItems('addedItems',prev?diff.negative.added.concat(diff.inquiries.added):[],'NEW');renderItems('inventory',latest?latest.negativeRecords:[],'SAVED');const t=el('timeline');t.replaceChildren();if(!clientRows.length){t.className='empty';t.textContent='No saved scans for this client.';}else{t.className='';clientRows.slice().reverse().forEach((x,i)=>{const p=d.createElement('div');p.className='scan';p.textContent=new Date(x.scannedAt).toLocaleString()+' — '+x.negativeRecords.length+' negative bureau records · '+x.inquiryRecords.length+' inquiries'+(i===0?' · LATEST':'');t.appendChild(p);});}};
         const refresh=async()=>{try{rows=await list();const clients=new Map();rows.forEach(x=>clients.set(x.clientKey,x.clientName));const select=el('client');select.replaceChildren();[...clients].sort((a,b)=>a[1].localeCompare(b[1])).forEach(([k,n])=>{const o=d.createElement('option');o.value=k;o.textContent=n;select.appendChild(o);});const wanted=tubolHistoryIdentity(clientName).clientKey;if(clients.has(wanted))selected=wanted;if(!selected||!clients.has(selected))selected=select.options[0]?.value||'';select.value=selected;render();}catch(e){el('timeline').textContent='History database error: '+e.message;}};
         el('client').addEventListener('change',()=>{selected=el('client').value;render();});el('refresh').addEventListener('click',refresh);
