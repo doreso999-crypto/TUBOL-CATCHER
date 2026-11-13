@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.13
+// @version      5.14
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.13';
+    const TUBOL_CATCHER_VERSION = '5.14';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -2004,6 +2004,9 @@ body { margin:0; background:#14171b; color:#e4e6eb; }
                     <span>Show and copy creditor names only</span>
                 </label>
                 <div class="crc-settings-note">Preferences are saved on this device. Open Accounts still includes every extracted account.</div>
+                <div class="crc-settings-section-title">Private report history</div>
+                <div class="crc-settings-note">Open the local scan-history dashboard from here. No dashboard button or report alert is shown on the main extractor panel.</div>
+                <button type="button" id="tubol-open-history-settings" style="width:100%;margin:4px 0 12px;padding:10px 12px;border:1px solid #4775aa;border-radius:8px;background:#24558c;color:#fff;font-weight:800;cursor:pointer;">Open Report History</button>
                 </div>
                 <div id="crc-settings-aliases" role="tabpanel" hidden>
                     <div class="crc-settings-note">Search and expand creditors. Right-click a name variation to remove it. Right-click an inquiry or open account to assign its name. Add a new creditor when none match.</div>
@@ -4922,22 +4925,8 @@ function extractInquiries() {
         refresh();
     }
 
-    function tubolInstallHistoryNotice(panel, clientName, diff) {
-        if (panel.querySelector('#tubol-history-notice')) return;
-        if (!document.getElementById('tubol-history-notice-css')) {
-            const style=document.createElement('style');style.id='tubol-history-notice-css';
-            style.textContent='#tubol-history-notice{margin:8px 12px 0;padding:10px 12px;border:1px solid #31527c;border-radius:10px;background:linear-gradient(110deg,#142b46,#172033);color:#eaf3ff;display:flex;align-items:center;justify-content:space-between;gap:9px;animation:tubolNoticeIn .35s ease both}#tubol-history-notice .copy{font:600 12px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-width:0}#tubol-history-notice small{display:block;color:#a8bfdc;font-weight:500}#tubol-history-notice button{border:1px solid #4775aa;border-radius:8px;background:#24558c;color:#fff;padding:8px 10px;font-size:10px;font-weight:800;cursor:pointer;white-space:nowrap}#tubol-history-notice.alert{border-color:#4b9a83;box-shadow:0 0 18px #38c99a18}#tubol-history-notice .pulse{display:inline-block;width:7px;height:7px;border-radius:50%;background:#5de0b1;margin-right:7px;animation:tubolPulse 1.6s infinite}@keyframes tubolNoticeIn{from{opacity:0;transform:translateY(-7px)}to{opacity:1;transform:none}}@keyframes tubolPulse{70%{box-shadow:0 0 0 7px #5de0b100}100%{box-shadow:0 0 0 0 #5de0b100}}';
-            document.head.appendChild(style);
-        }
-        const banner=document.createElement('div');banner.id='tubol-history-notice';
-        const copy=document.createElement('div');copy.className='copy';const title=document.createElement('div'),detail=document.createElement('small');
-        if(diff&&diff.saved){
-            if(diff.firstScan){title.textContent='History baseline saved';detail.textContent='Next scan will be compared for '+clientName+'.';}
-            else{banner.classList.add('alert');const removed=diff.negative.disappeared.length+diff.inquiries.disappeared.length,added=diff.negative.added.length+diff.inquiries.added.length;const dot=document.createElement('span');dot.className='pulse';title.append(dot,document.createTextNode(removed+' no longer reported · '+added+' newly reported'));detail.textContent='Compared with '+new Date(diff.previousScanAt).toLocaleDateString()+' · '+clientName;}
-        }else{title.textContent='Report history unavailable';detail.textContent=diff&&diff.reason?diff.reason:'Local history could not be saved.';}
-        copy.append(title,detail);const button=document.createElement('button');button.textContent='OPEN DASHBOARD';button.addEventListener('click',()=>tubolOpenHistoryDashboard(clientName));banner.append(copy,button);
-        const top=panel.querySelector('#crc-top-bar');if(top&&top.parentNode)top.parentNode.insertBefore(banner,top.nextSibling);else panel.insertBefore(banner,panel.firstChild);
-    }
+    // History is accessed only from Settings; keep the main extractor panel clear.
+    function tubolInstallHistoryNotice() { return; }
 
     function showResults(negativeData) {
         let bankruptcies = extractBankruptcies();
@@ -5719,6 +5708,8 @@ function extractInquiries() {
         // Gear menu: update both display and clipboard results without a rescan.
         const settingsButton = panel.querySelector('#crc-settings-btn');
         const settingsMenu = panel.querySelector('#crc-settings-menu');
+        const historySettingsButton = panel.querySelector('#tubol-open-history-settings');
+        historySettingsButton.addEventListener('click', () => tubolOpenHistoryDashboard(historyClientName || 'this client'));
         const inquiriesFormatSelect = panel.querySelector('#crc-inquiries-display-mode');
         const newFormatSelect = panel.querySelector('#crc-new-inquiries-display-mode');
         const personalFormatSelect = panel.querySelector('#crc-personal-display-mode');
