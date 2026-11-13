@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         CRC NEGATIVE SCANNER
 // @namespace    http://tampermonkey.net/
-// @version      5.15
+// @version      5.16
 // @description  Extract negative accounts, open accounts, inquiries, and previous addresses from CRC
 // @match        https://app.creditrepaircloud.com/app/clients/*
 // @grant        none
@@ -14,7 +14,7 @@
     if (window.__crcScriptInstalled) return;
     window.__crcScriptInstalled = true;
 
-    const TUBOL_CATCHER_VERSION = '5.15';
+    const TUBOL_CATCHER_VERSION = '5.16';
     // Expose the version that actually initialized (not the loader version).
     window.__tubolCatcherVersion = TUBOL_CATCHER_VERSION;
 
@@ -4921,12 +4921,59 @@ function extractInquiries() {
         d.close();
 
         const css = d.createElement('style');
-        css.textContent = '*{box-sizing:border-box}body{margin:0;background:#f4f5f7;color:#24272b;font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}button,select{font:inherit}.page{max-width:1180px;margin:0 auto;padding:30px 28px 48px}.top{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:24px}h1{margin:0;font-size:25px;line-height:1.25;font-weight:700;letter-spacing:-.4px}.subtitle{margin:6px 0 0;color:#6d737c;font-size:13px}.toolbar{display:flex;align-items:center;flex-wrap:wrap;gap:9px;margin:0 0 18px}select,.btn{min-height:38px;padding:8px 11px;border:1px solid #d5d9df;border-radius:7px;background:#fff;color:#30343a}select{min-width:220px;max-width:100%}.btn{cursor:pointer;font-weight:600}.btn:hover{background:#f8f9fa;border-color:#aeb5bf}.btn-primary{background:#245fbd;color:#fff;border-color:#245fbd}.btn-primary:hover{background:#1d529f;border-color:#1d529f}.updated{margin-left:auto;color:#7b818a;font-size:12px}.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:18px}.metric,.card{background:#fff;border:1px solid #e0e3e8;border-radius:9px}.metric{padding:15px 16px;min-height:92px}.metric-label{display:block;color:#69717c;font-size:12px}.metric-value{display:block;margin-top:5px;font-size:25px;line-height:1.2;font-weight:700;color:#252a31;font-variant-numeric:tabular-nums}.metric-value.neutral{color:#858c96}.section-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.card{padding:17px 18px;min-width:0}.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:3px}h2{margin:0;font-size:15px;font-weight:700}.card-help{margin:3px 0 12px;color:#7b828c;font-size:12px}.entry{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 0;border-top:1px solid #edf0f3}.entry-main{min-width:0}.entry-name{display:block;color:#292e35;font-weight:650;overflow-wrap:anywhere}.entry-meta{margin-top:3px;color:#737b86;font-size:12px;line-height:1.45;overflow-wrap:anywhere}.pill{flex:0 0 auto;border-radius:5px;padding:3px 7px;background:#edf3fc;color:#315f9d;font-size:10px;font-weight:700}.pill.removed{background:#f1f2f4;color:#5d6570}.empty{padding:15px 0 5px;color:#777f89;font-size:13px}.timeline{margin-top:14px}.scan-row{display:flex;justify-content:space-between;gap:16px;padding:10px 0;border-top:1px solid #edf0f3}.scan-date{font-weight:600;color:#343941}.scan-count{color:#737b86;font-size:12px;text-align:right}.footnote{margin:14px 2px 0;color:#858c95;font-size:11px;line-height:1.5}.error{color:#9a3434}@media(max-width:760px){.page{padding:22px 16px 36px}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.section-grid{grid-template-columns:1fr}.top{display:block}.updated{width:100%;margin:3px 0 0}}@media(max-width:420px){.metric{padding:12px}.metric-value{font-size:22px}select{min-width:0;flex:1}.toolbar .btn{flex:1}}';
+        css.textContent = `
+*{box-sizing:border-box}
+:root{color-scheme:light;--ink:#202722;--muted:#68716a;--line:#e2e5df;--paper:#fff;--ground:#f2f3ef;--green:#315b48;--green-dark:#244635;--green-pale:#edf3ee;--red:#8a5147;--red-pale:#f5eeeb}
+body{margin:0;background:var(--ground);color:var(--ink);font:14px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif}
+button,select{font:inherit}
+.page{max-width:1240px;margin:0 auto;padding:34px 34px 52px}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;padding:0 0 22px;border-bottom:1px solid #d9ded6;margin-bottom:20px}
+.eyebrow{margin:0 0 5px;color:var(--green);font-size:10px;font-weight:750;letter-spacing:1.25px;text-transform:uppercase}
+h1{margin:0;font-size:27px;line-height:1.15;font-weight:650;letter-spacing:-.7px}
+.subtitle{margin:7px 0 0;color:var(--muted);font-size:13px}
+.toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 19px}
+select,.btn{height:38px;padding:0 12px;border:1px solid #d4d9d1;border-radius:4px;background:#fff;color:#28312b}
+select{min-width:250px;max-width:100%}
+.btn{cursor:pointer;font-weight:600}
+.btn:hover{border-color:#9aa89c;background:#f8faf7}
+.btn-primary{background:var(--green);border-color:var(--green);color:#fff}
+.btn-primary:hover{background:var(--green-dark);border-color:var(--green-dark)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.updated{margin-left:auto;color:var(--muted);font-size:12px}
+.summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;background:var(--paper);border:1px solid var(--line);margin-bottom:19px}
+.metric{padding:15px 18px 14px;min-height:86px;border-right:1px solid var(--line)}
+.metric:last-child{border-right:0}
+.metric-label{display:block;color:var(--muted);font-size:11px;font-weight:600}
+.metric-value{display:block;margin-top:5px;font-size:27px;line-height:1.15;font-weight:650;letter-spacing:-.6px;color:var(--ink);font-variant-numeric:tabular-nums}
+.metric-value.neutral{color:#a0a69f}
+.section-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px}
+.card{background:var(--paper);border:1px solid var(--line);padding:17px 19px;min-width:0}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:2px}
+h2{margin:0;font-size:14px;font-weight:700;letter-spacing:-.1px}
+.card-help{margin:4px 0 12px;color:var(--muted);font-size:12px}
+.entry{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;padding:10px 0;border-top:1px solid #eceee9}
+.entry-main{min-width:0}
+.entry-name{display:block;color:#252d27;font-weight:650;overflow-wrap:anywhere}
+.entry-meta{margin-top:3px;color:#737b74;font-size:11px;line-height:1.5;overflow-wrap:anywhere}
+.pill{flex:0 0 auto;border-radius:3px;padding:2px 7px;background:var(--green-pale);color:var(--green);font-size:9px;letter-spacing:.45px;font-weight:750}
+.pill.removed{background:var(--red-pale);color:var(--red)}
+.empty{padding:13px 0 4px;color:#7b837c;font-size:12px}
+.timeline{margin-top:13px;padding-bottom:8px}
+.timeline-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.scan-row{display:grid;grid-template-columns:minmax(170px,1fr) minmax(0,2fr) auto;align-items:center;gap:18px;padding:11px 0;border-top:1px solid #eceee9}
+.scan-date{font-weight:650;color:#303a32;font-size:12px}
+.scan-count{color:#727b73;font-size:11px}
+.scan-latest{color:var(--green);font-size:10px;font-weight:750;letter-spacing:.5px;text-transform:uppercase}
+.footnote{margin:13px 1px 0;color:#7c847d;font-size:10px;line-height:1.55}
+.error{color:#9a3434}
+@media(max-width:760px){.page{padding:23px 16px 36px}.summary{grid-template-columns:repeat(2,minmax(0,1fr))}.metric:nth-child(2){border-right:0}.metric:nth-child(-n+2){border-bottom:1px solid var(--line)}.section-grid{grid-template-columns:1fr}.top{display:block}.updated{width:100%;margin:4px 0 0}.scan-row{grid-template-columns:1fr auto;gap:3px 12px}.scan-count{grid-column:1/-1;grid-row:2}.scan-latest{grid-column:2;grid-row:1}}
+@media(max-width:420px){.metric{padding:12px}.metric-value{font-size:23px}select{min-width:0;flex:1}.toolbar .btn{flex:1}}
+        `;
         d.head.appendChild(css);
 
         const root = d.createElement('main');
         root.className = 'page';
-        root.innerHTML = '<header class="top"><div><h1>Report history</h1><p class="subtitle">Review changes between this client\'s saved credit reports.</p></div></header><div class="toolbar"><select id="client" aria-label="Choose client"></select><button class="btn" id="refresh" type="button">Refresh</button><button class="btn btn-primary" id="export" type="button">Export history</button><span class="updated" id="updated"></span></div><section class="summary" aria-label="Report summary"><div class="metric"><span class="metric-label">Reports saved</span><strong class="metric-value" id="scans">0</strong></div><div class="metric"><span class="metric-label">Accounts not on latest report</span><strong class="metric-value neutral" id="neg">—</strong></div><div class="metric"><span class="metric-label">Inquiries not on latest report</span><strong class="metric-value neutral" id="inq">—</strong></div><div class="metric"><span class="metric-label">New items on latest report</span><strong class="metric-value neutral" id="added">—</strong></div></section><section class="section-grid"><article class="card"><div class="card-head"><h2>Accounts no longer listed</h2></div><p class="card-help">Accounts found on the previous report but not the latest one.</p><div id="goneNeg" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Inquiries no longer listed</h2></div><p class="card-help">Inquiries found previously but missing from the latest report.</p><div id="goneInq" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>New items</h2></div><p class="card-help">Accounts and inquiries that appear on the latest report only.</p><div id="addedItems" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Accounts on latest report</h2></div><p class="card-help">Negative accounts saved from the most recent scan.</p><div id="inventory" class="empty">Loading reports…</div></article></section><section class="card timeline"><h2>Previous scans</h2><p class="card-help">Most recent scan first.</p><div id="timeline" class="empty">Loading reports…</div></section><p class="footnote">A missing item means it was not found in the latest scan. It does not by itself confirm that the bureau or creditor deleted it. Report history is saved in this browser only.</p>';
+        root.innerHTML = `<header class="top"><div><p class="eyebrow">TUBOL-CATCHER / CLIENT RECORDS</p><h1>Report history</h1><p class="subtitle">A local record of what each scan found.</p></div></header><div class="toolbar"><select id="client" aria-label="Choose client"></select><button class="btn" id="refresh" type="button">Refresh</button><button class="btn btn-primary" id="export" type="button">Export data</button><span class="updated" id="updated"></span></div><section class="summary" aria-label="Report summary"><div class="metric"><span class="metric-label">Saved scans</span><strong class="metric-value" id="scans">0</strong></div><div class="metric"><span class="metric-label">Accounts no longer found</span><strong class="metric-value neutral" id="neg">—</strong></div><div class="metric"><span class="metric-label">Inquiries no longer found</span><strong class="metric-value neutral" id="inq">—</strong></div><div class="metric"><span class="metric-label">New entries</span><strong class="metric-value neutral" id="added">—</strong></div></section><section class="section-grid"><article class="card"><div class="card-head"><h2>Accounts missing from latest scan</h2></div><p class="card-help">Previously recorded accounts not found in the most recent scan.</p><div id="goneNeg" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Inquiries missing from latest scan</h2></div><p class="card-help">Previously recorded inquiries not found in the most recent scan.</p><div id="goneInq" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>New since previous scan</h2></div><p class="card-help">Entries present in the latest scan but absent from the one before it.</p><div id="addedItems" class="empty">Loading reports…</div></article><article class="card"><div class="card-head"><h2>Latest scan · account list</h2></div><p class="card-help">Negative accounts recorded in the most recent scan.</p><div id="inventory" class="empty">Loading reports…</div></article></section><section class="card timeline"><div class="timeline-head"><h2>Scan log</h2></div><p class="card-help">Saved locally on this device, newest first.</p><div id="timeline" class="empty">Loading reports…</div></section><p class="footnote">Items missing from a scan are not proof that a bureau or creditor deleted them. This history is stored in this browser and is separate from Credit Repair Cloud.</p>`;
         d.body.appendChild(root);
 
         const el = id => d.getElementById(id);
@@ -4988,7 +5035,7 @@ function extractInquiries() {
                     const date = d.createElement('span'); date.className = 'scan-date'; date.textContent = new Date(scan.scannedAt).toLocaleString();
                     const count = d.createElement('span'); count.className = 'scan-count';
                     count.textContent = scan.negativeRecords.length + ' negative account records · ' + scan.inquiryRecords.length + ' inquiries' + (index === 0 ? ' · Latest' : '');
-                    row.append(date,count); timeline.appendChild(row);
+                    const latestTag = d.createElement('span'); latestTag.className = 'scan-latest'; latestTag.textContent = index === 0 ? 'Latest' : ''; row.append(date,count,latestTag); timeline.appendChild(row);
                 });
             }
         };
